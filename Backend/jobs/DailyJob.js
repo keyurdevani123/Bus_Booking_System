@@ -73,29 +73,26 @@ const deleteBooking = asyncHandler(async () => {
   console.log(`Deleted all bookings before ${threeDaysAgo}`);
 });
 
-//delete freeze days after 3 days
+//delete freeze days after 3 days — runs entirely on MongoDB, no docs loaded into Node
 const deleteFreezeDays = asyncHandler(async () => {
-  const threeDaysAgo = dayjs().subtract(3, "day").format("YYYY-MM-DD");
-  const buses = await Bus.find();
-  if (!buses) {
-    return;
-  }
-  if (!buses.length) {
-    return;
-  }
-  const operations = buses.map((bus) => ({
-    updateOne: {
-      filter: { _id: bus._id },
-      update: {
+  // Keep only dates that are >= 3 days ago (YYYY-MM-DD strings compare correctly lexicographically)
+  const cutoff = dayjs().subtract(3, "day").format("YYYY-MM-DD");
+  await Bus.updateMany(
+    { freezedDays: { $exists: true, $ne: [] } },
+    [
+      {
         $set: {
-          freezedDays: bus.freezedDays.filter((date) => {
-            return dayjs(date).diff(dayjs(), "day") >= -3;
-          }),
+          freezedDays: {
+            $filter: {
+              input: "$freezedDays",
+              as: "d",
+              cond: { $gt: ["$$d", cutoff] },
+            },
+          },
         },
       },
-    },
-  }));
-  await Bus.bulkWrite(operations);
+    ]
+  );
 });
 
 //delete pdfs after 3 days
