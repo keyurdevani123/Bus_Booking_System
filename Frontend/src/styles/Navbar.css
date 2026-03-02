@@ -1,0 +1,199 @@
+/* ── Navbar ─────────────────────────────────────────────── */
+.navbar {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(26,60,110,0.18);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.navbar-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  height: 64px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: #fff;
+}
+.brand-icon  { font-size: 26px; line-height: 1; }
+.brand-name  { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; color: #fff; }
+.brand-accent{ color: var(--accent); }
+
+.navbar-menu {
+  display: flex;
+  list-style: none;
+  align-items: center;
+  gap: 4px;
+}
+.navbar-menu li a,
+.navbar-menu li span.nav-welcome {
+  display: block;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.88);
+  transition: background 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+.navbar-menu li a:hover { background: rgba(255,255,255,0.12); color: #fff; }
+.nav-welcome  { color: rgba(255,255,255,0.88) !important; cursor: default; }
+.nav-signup   { background: rgba(255,255,255,0.12) !important; }
+.nav-login    { background: var(--accent) !important; color: #fff !important; font-weight: 600 !important; padding: 8px 20px !important; border-radius: 6px !important; }
+.nav-login:hover  { background: var(--accent-dark) !important; }
+.nav-dashboard{ background: rgba(255,255,255,0.15) !important; font-weight: 600 !important; }
+
+.nav-logout-btn {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.3);
+  color: #fff;
+  padding: 7px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+.nav-logout-btn:hover { background: rgba(255,255,255,0.22); }
+
+.hamburger {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+}
+.hamburger span {
+  display: block;
+  width: 24px;
+  height: 2px;
+  background: #fff;
+  border-radius: 2px;
+  transition: transform 0.25s, opacity 0.25s;
+}
+.hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.hamburger.open span:nth-child(2) { opacity: 0; }
+.hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+.mobile-menu {
+  background: var(--primary-light);
+  display: flex;
+  flex-direction: column;
+  padding: 10px 16px 16px;
+  gap: 4px;
+  border-top: 1px solid rgba(255,255,255,0.12);
+}
+.mobile-menu a,
+.mobile-menu .mobile-welcome {
+  display: block;
+  padding: 11px 14px;
+  border-radius: 8px;
+  color: rgba(255,255,255,0.9);
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+.mobile-menu a:hover { background: rgba(255,255,255,0.12); }
+.mobile-welcome { cursor: default; }
+.mobile-logout {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: #fff;
+  padding: 11px 14px;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.2s;
+}
+.mobile-logout:hover { background: rgba(255,255,255,0.18); }
+
+@media (max-width: 768px) {
+  .navbar-menu { display: none; }
+  .hamburger   { display: flex; }
+}
+
+
+.navbar-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.navbar-brand {
+  font-size: 24px;
+  font-weight: bold;
+  text-decoration: none;
+  color: white;
+  margin-right: 40px;
+}
+
+.navbar-menu {
+  display: flex;
+  list-style: none;
+  gap: 30px;
+  align-items: center;
+}
+
+.navbar-menu a {
+  color: white;
+  text-decoration: none;
+  font-weight: 500;
+  transition: opacity 0.3s;
+}
+
+.navbar-menu a:hover {
+  opacity: 0.8;
+}
+
+.logout-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid white;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.3s;
+}
+
+.logout-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.user-name {
+  color: white;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .navbar-menu {
+    gap: 15px;
+    font-size: 14px;
+  }
+  
+  .navbar-brand {
+    margin-right: 20px;
+    font-size: 20px;
+  }
+}
