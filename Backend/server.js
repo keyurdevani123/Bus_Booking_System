@@ -52,7 +52,6 @@ if (require("fs").existsSync(frontendBuildPath)) {
 
 
 app.use("/", require("./routes/root"));
-app.use("/auth/checker", require("./routes/authChecker"));
 app.use("/auth/admin", require("./routes/authAdmin"));
 app.use("/auth/user", require("./routes/authUser"));
 app.use("/auth", require("./routes/passwordReset"));
@@ -66,7 +65,6 @@ app.use("/booking", require("./routes/booking"));
 //app.use("/completebooking", require("./routes/bookingcomplete"));
 app.use("/companies", require("./routes/api/getAllBusComapnies"));
 app.use("/api/getAllBusCompanies", require("./routes/api/getAllBusComapnies"));
-app.use("/checkers", require("./routes/checker"));
 app.use("/admins", require("./routes/admin"));
 app.use("/users", require("./routes/user"));
 app.use("/authBuses", require("./routes/api/getAuthBuses"));

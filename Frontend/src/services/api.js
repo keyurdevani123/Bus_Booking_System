@@ -16,8 +16,6 @@ export const authService = {
     api.post('/auth/admin', { username, password }),
   adminSignup: (username, email, password, role) =>
     api.post('/admins', { username, email, password, role }),
-  checkerLogin: (username, password) => 
-    api.post('/auth/checker', { username, password }),
   userSignup: (name, email, password, phone) =>
     api.post('/users', { name, email, password, phone }),
   userLogin: (email, password) =>

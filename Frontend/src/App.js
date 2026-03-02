@@ -7,8 +7,6 @@ import BusSearch from './pages/BusSearch';
 import Booking from './pages/Booking';
 import Signup from './pages/Signup';
 import AdminDashboard from './pages/AdminDashboard';
-import CheckerLogin from './pages/CheckerLogin';
-import CheckerDashboard from './pages/CheckerDashboard';
 import Login from './pages/Login';
 import PaymentSuccess from './pages/PaymentSuccess';
 import ForgotPassword from './pages/ForgotPassword';
@@ -24,7 +22,6 @@ function PrivateRoute({ userToken, children }) {
 
 function App() {
   const [adminToken, setAdminToken] = useState(localStorage.getItem('adminToken'));
-  const [checkerToken, setCheckerToken] = useState(localStorage.getItem('checkerToken'));
   const [userToken, setUserToken] = useState(() => {
     try {
       const stored = localStorage.getItem('userToken');
@@ -42,11 +39,6 @@ function App() {
     setAdminToken(token);
   };
 
-  const handleSetCheckerToken = (token) => {
-    console.log("App: Setting checker token:", token);
-    setCheckerToken(token);
-  };
-
   const handleSetUserToken = (token) => {
     console.log("App: Setting user token:", token);
     setUserToken(token);
@@ -55,12 +47,6 @@ function App() {
   const handleAdminLogout = () => {
     setAdminToken(null);
     localStorage.removeItem('adminToken');
-    sessionStorage.clear();
-  };
-
-  const handleCheckerLogout = () => {
-    setCheckerToken(null);
-    localStorage.removeItem('checkerToken');
     sessionStorage.clear();
   };
 
@@ -74,10 +60,8 @@ function App() {
     <Router>
       <Navbar 
         adminToken={adminToken} 
-        checkerToken={checkerToken} 
         userToken={userToken}
         onAdminLogout={handleAdminLogout} 
-        onCheckerLogout={handleCheckerLogout}
         onUserLogout={handleUserLogout}
       />
       <main className="main-container">
@@ -97,8 +81,6 @@ function App() {
               <Navigate to="/admin/login" />
             )}
           />
-          <Route path="/checker/login" element={<CheckerLogin setToken={handleSetCheckerToken} />} />
-          <Route path="/checker/dashboard" element={checkerToken ? <CheckerDashboard token={checkerToken} /> : <Navigate to="/checker/login" />} />
           <Route path="/user/login" element={<Login setUserToken={handleSetUserToken} setAdminToken={handleSetAdminToken} />} />
           <Route path="/login"      element={<Login setUserToken={handleSetUserToken} setAdminToken={handleSetAdminToken} />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />

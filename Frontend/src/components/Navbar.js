@@ -2,14 +2,13 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import '../styles/Navbar.css';
 
-function Navbar({ adminToken, checkerToken, userToken, onAdminLogout, onCheckerLogout, onUserLogout }) {
+function Navbar({ adminToken, userToken, onAdminLogout, onUserLogout }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
   const close = () => setOpen(false);
 
   const handleAdminLogout = () => { onAdminLogout(); close(); navigate('/'); };
-  const handleCheckerLogout = () => { onCheckerLogout(); close(); navigate('/'); };
   const handleUserLogout = () => { onUserLogout(); close(); navigate('/'); };
 
   return (
@@ -26,7 +25,7 @@ function Navbar({ adminToken, checkerToken, userToken, onAdminLogout, onCheckerL
           <li><Link to="/">Home</Link></li>
           <li><Link to="/search">Search Buses</Link></li>
 
-          {!adminToken && !checkerToken && !userToken && (
+          {!adminToken && !userToken && (
             <>
               <li><Link to="/signup" className="nav-signup">Sign Up</Link></li>
               <li><Link to="/login" className="nav-login">Login</Link></li>
@@ -47,12 +46,6 @@ function Navbar({ adminToken, checkerToken, userToken, onAdminLogout, onCheckerL
             </>
           )}
 
-          {checkerToken && (
-            <>
-              <li><Link to="/checker/dashboard" className="nav-dashboard">Dashboard</Link></li>
-              <li><button onClick={handleCheckerLogout} className="nav-logout-btn">Logout</button></li>
-            </>
-          )}
         </ul>
 
         {/* Hamburger */}
@@ -67,7 +60,7 @@ function Navbar({ adminToken, checkerToken, userToken, onAdminLogout, onCheckerL
           <Link to="/" onClick={close}>Home</Link>
           <Link to="/search" onClick={close}>Search Buses</Link>
 
-          {!adminToken && !checkerToken && !userToken && (
+          {!adminToken && !userToken && (
             <>
               <Link to="/signup" onClick={close}>Sign Up</Link>
               <Link to="/login" onClick={close}>Login</Link>
@@ -88,12 +81,6 @@ function Navbar({ adminToken, checkerToken, userToken, onAdminLogout, onCheckerL
             </>
           )}
 
-          {checkerToken && (
-            <>
-              <Link to="/checker/dashboard" onClick={close}>Dashboard</Link>
-              <button onClick={handleCheckerLogout} className="mobile-logout">Logout</button>
-            </>
-          )}
         </div>
       )}
     </nav>
