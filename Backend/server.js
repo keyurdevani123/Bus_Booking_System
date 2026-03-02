@@ -94,29 +94,22 @@ mongoose.connection.once("open", () => {
   console.log("Database connected");
 
   // ── Startup: release any seats stuck in "processing" (take=2) ────────────
-  // These are seats marked processing before the 5-min timeout was introduced,
-  // or from sessions that crashed before the timeout could fire.
+  // Done entirely in MongoDB — no documents loaded into Node memory.
   const releaseStuckProcessingSeats = async () => {
     try {
       const Bus = require("./model/Bus");
-      const buses = await Bus.find({}).lean(false); // full docs
-      let totalReleased = 0;
-      for (const bus of buses) {
-        let changed = false;
-        for (const seat of bus.seats) {
-          for (const avail of seat.availability || []) {
-            for (const b of avail.booked || []) {
-              if (b.take && b.take.in === 2) { b.take.in = 0; changed = true; totalReleased++; }
-              if (b.take && b.take.out === 2) { b.take.out = 0; changed = true; }
-            }
-          }
-        }
-        if (changed) await bus.save();
-      }
-      if (totalReleased > 0)
-        console.log(`Startup cleanup: released ${totalReleased} stuck processing seat entries.`);
-      else
-        console.log("Startup cleanup: no stuck processing seats found.");
+      const r1 = await Bus.updateMany(
+        { "seats.availability.booked.take.in": 2 },
+        { $set: { "seats.$[].availability.$[].booked.$[b].take.in": 0 } },
+        { arrayFilters: [{ "b.take.in": 2 }] }
+      );
+      const r2 = await Bus.updateMany(
+        { "seats.availability.booked.take.out": 2 },
+        { $set: { "seats.$[].availability.$[].booked.$[b].take.out": 0 } },
+        { arrayFilters: [{ "b.take.out": 2 }] }
+      );
+      const total = (r1.modifiedCount || 0) + (r2.modifiedCount || 0);
+      console.log(`Startup cleanup: released stuck processing seats in ${total} bus document(s).`);
     } catch (err) {
       console.error("Startup cleanup error:", err);
     }
