@@ -21,6 +21,11 @@
   --shadow-lg:     0 8px 40px rgba(0,0,0,0.13);
 }
 
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+}
+
 body {
   font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   background-color: var(--bg);

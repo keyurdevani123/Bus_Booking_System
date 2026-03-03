@@ -339,10 +339,42 @@
 @media (max-width: 768px) {
   .form-row { flex-direction: column; }
   .form-swap { display: none; }
-  .bus-card { flex-direction: column; }
-  .bus-card-left, .bus-card-right { border: none; border-top: 1px solid #f0f0f0; }
+
+  .bus-card { flex-direction: column; width: 100%; }
+
+  .bus-card-left {
+    border: none;
+    border-bottom: 1px solid #f0f0f0;
+    min-width: unset;
+    width: 100%;
+    padding: 14px 16px;
+  }
+
+  .bus-card-mid {
+    padding: 12px 14px;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .timing-block .time { font-size: 18px; }
+
+  .bus-card-right {
+    border: none;
+    border-top: 1px solid #f0f0f0;
+    min-width: unset;
+    width: 100%;
+    padding: 14px 16px;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .book-btn { width: auto; padding: 9px 24px; }
+
   .route-stops-labels { display: none; }
   .route-meta { margin-top: 4px; }
+
+  .results-header { flex-direction: column; align-items: flex-start; gap: 4px; }
 }
 
 /* -- Halt-stops badge ---------------------------------------- */
