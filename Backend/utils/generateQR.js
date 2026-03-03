@@ -51,7 +51,7 @@ function generateQRCodeAndPDF(
         .font("Helvetica-Bold")
         .fontSize(22)
         .fillColor("#FFFFFF")
-        .text("E-Ticket Travel Pass", pad, 18, { width: W - pad * 2, align: "center" });
+        .text("BusBazaar Travel Pass", pad, 18, { width: W - pad * 2, align: "center" });
       doc
         .fontSize(11)
         .fillColor("rgba(255,255,255,0.75)")

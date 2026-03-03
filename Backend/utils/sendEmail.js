@@ -17,13 +17,13 @@ function sendEmailWithAttachment(email, tempBookId) {
   });
 
   const mailOptions = {
-    from: `"E-Ticket" <${process.env.EMAIL_USER}>`,
+    from: `"BusBazaar" <${process.env.EMAIL_USER}>`,
     to: email,
-    subject: "Your E-Ticket Booking Confirmation",
+    subject: "Your BusBazaar Booking Confirmation",
     html: `
       <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;">
         <div style="background:#000991;padding:20px;text-align:center;border-radius:8px 8px 0 0;">
-          <h2 style="color:#fff;margin:0;">E-Ticket Travel Pass</h2>
+          <h2 style="color:#fff;margin:0;">BusBazaar Travel Pass</h2>
         </div>
         <div style="padding:24px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px;">
           <p>Hi there,</p>
