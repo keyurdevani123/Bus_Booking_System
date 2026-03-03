@@ -71,18 +71,16 @@ app.use("/authBuses", require("./routes/api/getAuthBuses"));
 app.use("/api/getAuthBuses", require("./routes/api/getAuthBuses"));
 
 app.all("*", (req, res) => {
-  const frontendIndex = path.join(__dirname, "..", "E-Ticket-Frontend", "build", "index.html");
-  // For any browser GET (Accept: text/html), serve the React SPA so React Router handles routing
+  // For any browser GET, serve React SPA so React Router handles all client-side routes
+  const frontendIndex = path.join(__dirname, "public", "index.html");
   if (req.method === "GET" && req.accepts("html") && require("fs").existsSync(frontendIndex)) {
     return res.sendFile(frontendIndex);
   }
   res.status(404);
-  if (req.accepts("html")) {
-    res.sendFile(path.join(__dirname, "views", "404.html"));
-  } else if (req.accepts("json")) {
-    res.json({ error: "Page not found" });
+  if (req.accepts("json")) {
+    res.json({ error: "Not found" });
   } else {
-    res.type("txt").send("Page not found");
+    res.type("txt").send("Not found");
   }
 });
 

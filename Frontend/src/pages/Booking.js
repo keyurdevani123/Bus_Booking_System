@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { bookingService, busService } from '../services/api';
 import '../styles/Booking.css';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3200';
+const API_URL = process.env.REACT_APP_API_URL || (typeof window !== 'undefined' ? window.location.origin : '');
 
 function Booking() {
   const { busId } = useParams();
