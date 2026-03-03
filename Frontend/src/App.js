@@ -14,7 +14,8 @@ import ResetPassword from './pages/ResetPassword';
 
 function PrivateRoute({ children }) {
   const location = useLocation();
-  if (!localStorage.getItem('userToken')) {
+  const isAuth = localStorage.getItem('userToken') || localStorage.getItem('adminToken');
+  if (!isAuth) {
     return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   }
   return children;
