@@ -233,7 +233,13 @@ function BusSearch() {
               <button
                 className="book-btn"
                 disabled={bus.totalAvailableSeats === 0}
-                onClick={() => navigate(`/booking/${bus._id}`, { state: { bus, date, from, to } })}
+                onClick={() => {
+                  try { sessionStorage.setItem('bookingBus', JSON.stringify({ bus, date, from, to })); } catch {}
+                  navigate(
+                    `/booking/${bus._id}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}`,
+                    { state: { bus, date, from, to } }
+                  );
+                }}
               >
                 View Seats
               </button>

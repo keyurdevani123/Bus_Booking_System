@@ -9,12 +9,16 @@ function Booking() {
   const { busId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const passed = location.state || {};
+
+  // Restore search context: priority = router state → sessionStorage → URL query params
+  const searchParams = new URLSearchParams(location.search);
+  const getSaved = () => { try { return JSON.parse(sessionStorage.getItem('bookingBus') || 'null'); } catch { return null; } };
+  const passed = location.state || getSaved() || {};
 
   const [bus, setBus] = useState(passed.bus || null);
-  const [searchDate] = useState(passed.date || new Date().toISOString().split('T')[0]);
-  const [fromCity] = useState(passed.from || '');
-  const [toCity] = useState(passed.to || '');
+  const [searchDate] = useState(passed.date || searchParams.get('date') || new Date().toISOString().split('T')[0]);
+  const [fromCity] = useState(passed.from || searchParams.get('from') || '');
+  const [toCity] = useState(passed.to || searchParams.get('to') || '');
   // Derive fallback cities from the bus itself if not passed via router state
   const effectiveFrom = fromCity || (bus?.busFrom?.city || bus?.route?.[0]?.city || '');
   const effectiveTo   = toCity   || (bus?.busTo?.city   || bus?.route?.[bus?.route?.length - 1]?.city || '');
