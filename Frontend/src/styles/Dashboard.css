@@ -154,18 +154,38 @@ table button:hover {
 }
 
 @media (max-width: 768px) {
-  table {
-    font-size: 12px;
+  .dashboard-container {
+    padding: 16px 12px;
+    border-radius: 8px;
   }
-  
-  table th,
-  table td {
-    padding: 8px;
+  .dashboard-container h2 { font-size: 20px; margin-bottom: 16px; }
+  .dashboard-container h3 { font-size: 16px; }
+
+  .filter-buttons {
+    flex-wrap: wrap;
+    gap: 8px;
   }
-  
+  .filter-buttons button {
+    padding: 8px 14px;
+    font-size: 13px;
+    flex: 1;
+    min-width: 100px;
+  }
+
+  .add-btn { font-size: 13px; padding: 9px 16px; }
+
   .add-bus-form {
-    grid-template-columns: 1fr;
+    padding: 14px;
   }
+  .form-row-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  table { font-size: 12px; }
+  table th, table td { padding: 8px 6px; }
+
+  .buses-table, .bookings-table { overflow-x: auto; }
 }
 
 /* ===== New Admin Bus Form ===== */

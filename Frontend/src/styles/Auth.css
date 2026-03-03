@@ -599,3 +599,30 @@
   background: #2557A7;
   color: #fff;
 }
+
+/* ── Mobile Responsive ───────────────────────────────────── */
+@media (max-width: 480px) {
+  .auth-container {
+    padding: 16px 12px;
+    align-items: flex-start;
+    padding-top: 24px;
+  }
+  .auth-box {
+    padding: 28px 20px;
+    border-radius: 12px;
+  }
+  .auth-box h2 { font-size: 22px; margin-bottom: 20px; }
+  .login-combined-box { max-width: 100%; }
+  .login-tab { font-size: 13px; padding: 9px 0; }
+  .login-title { font-size: 19px !important; }
+  .auth-box input, .auth-box select {
+    padding: 11px 12px;
+    font-size: 14px;
+  }
+  .auth-box button[type=submit] {
+    padding: 12px;
+    font-size: 14px;
+  }
+  .type-toggle { gap: 6px; }
+  .toggle-btn { font-size: 13px; padding: 8px 0; }
+}
