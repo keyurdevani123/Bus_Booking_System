@@ -12,9 +12,9 @@ import PaymentSuccess from './pages/PaymentSuccess';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 
-function PrivateRoute({ userToken, children }) {
+function PrivateRoute({ children }) {
   const location = useLocation();
-  if (!userToken && !localStorage.getItem('userToken')) {
+  if (!localStorage.getItem('userToken')) {
     return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   }
   return children;
@@ -40,7 +40,11 @@ function App() {
   };
 
   const handleSetUserToken = (token) => {
-    console.log("App: Setting user token:", token);
+    if (token) {
+      localStorage.setItem('userToken', JSON.stringify(token));
+    } else {
+      localStorage.removeItem('userToken');
+    }
     setUserToken(token);
   };
 
@@ -69,7 +73,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/search" element={<BusSearch />} />
           <Route path="/booking/:busId" element={
-            <PrivateRoute userToken={userToken}><Booking /></PrivateRoute>
+            <PrivateRoute><Booking /></PrivateRoute>
           } />
           <Route path="/signup" element={<Signup />} />
           <Route path="/admin/login" element={<Navigate to="/login?tab=admin" replace />} />
@@ -86,7 +90,7 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/payment-success" element={
-            <PrivateRoute userToken={userToken}><PaymentSuccess /></PrivateRoute>
+            <PrivateRoute><PaymentSuccess /></PrivateRoute>
           } />
         </Routes>
       </main>
