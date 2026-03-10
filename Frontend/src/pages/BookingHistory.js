@@ -22,7 +22,10 @@ function BookingHistory() {
   const userToken = (() => {
     try {
       const s = localStorage.getItem('userToken');
-      return s ? JSON.parse(s) : null;
+      if (s) return JSON.parse(s);
+      // Admin fallback — use adminData so admins can view their own bookings
+      const a = localStorage.getItem('adminData');
+      return a ? JSON.parse(a) : null;
     } catch { return null; }
   })();
 

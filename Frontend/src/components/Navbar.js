@@ -44,10 +44,7 @@ function Navbar({ adminToken, userToken, onAdminLogout, onUserLogout }) {
           )}
 
           {userToken && (
-            <>
-              <li><span className="nav-welcome">👤 {userToken.name}</span></li>
-              <li><button onClick={handleUserLogout} className="nav-logout-btn">Logout</button></li>
-            </>
+            <li><button onClick={handleUserLogout} className="nav-logout-btn">Logout</button></li>
           )}
 
           {adminToken && (
