@@ -30,7 +30,10 @@ function Navbar({ adminToken, userToken, onAdminLogout, onUserLogout }) {
           )}
 
           {adminToken && (
-            <li><Link to="/admin/dashboard" className="nav-dashboard">Dashboard</Link></li>
+            <>
+              <li><Link to="/my-bookings" className="nav-bookings">My Bookings</Link></li>
+              <li><Link to="/admin/dashboard" className="nav-dashboard">Dashboard</Link></li>
+            </>
           )}
 
           {!adminToken && !userToken && (
@@ -70,7 +73,10 @@ function Navbar({ adminToken, userToken, onAdminLogout, onUserLogout }) {
           )}
 
           {adminToken && (
-            <Link to="/admin/dashboard" onClick={close}>Dashboard</Link>
+            <>
+              <Link to="/my-bookings" onClick={close} className="nav-bookings-mobile">🎟️ My Bookings</Link>
+              <Link to="/admin/dashboard" onClick={close}>Dashboard</Link>
+            </>
           )}
 
           {!adminToken && !userToken && (
