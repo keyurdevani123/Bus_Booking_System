@@ -1,0 +1,144 @@
+/* ── CitySearchInput ─────────────────────────────────────────────────────── */
+
+.csi-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+/* The visible "button-like" control */
+.csi-control {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border: 2px solid #dde3f0;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #fff;
+  color: #333;
+  width: 100%;
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  height: 42px;          /* fixed height — never grows on open/focus */
+  user-select: none;
+  outline: none;
+}
+
+.csi-control:focus,
+.csi-control.csi-open {
+  border-color: #1A3C6E; /* just a color change — no shadow, no size change */
+}
+
+.csi-display-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #333;
+  font-size: 14px;
+}
+
+.csi-placeholder {
+  color: #999;
+}
+
+/* The text input rendered inside the control when open */
+.csi-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: #333;
+  background: transparent;
+  padding: 0;
+  min-width: 0;
+}
+
+.csi-input::placeholder {
+  color: #bbb;
+}
+
+/* Arrow chevron */
+.csi-arrow {
+  margin-left: 6px;
+  font-size: 11px;
+  color: #888;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.csi-arrow.csi-arrow-up {
+  transform: rotate(180deg);
+}
+
+/* Dropdown list */
+.csi-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #dde3f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(37, 87, 167, 0.18);
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 500;
+  padding: 4px 0;
+  margin: 0;
+  list-style: none;
+
+  /* Smooth scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: #c8d0e7 transparent;
+}
+
+.csi-dropdown::-webkit-scrollbar {
+  width: 5px;
+}
+.csi-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+.csi-dropdown::-webkit-scrollbar-thumb {
+  background: #c8d0e7;
+  border-radius: 4px;
+}
+
+/* Individual option */
+.csi-option {
+  padding: 9px 14px;
+  font-size: 13.5px;
+  color: #333;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.csi-option.csi-highlighted {
+  background: #eef3fd;
+  color: #1A3C6E;
+}
+
+.csi-option.csi-selected {
+  background: #dce8fb;
+  color: #1A3C6E;
+  font-weight: 700;
+}
+
+.csi-option.csi-selected.csi-highlighted {
+  background: #ccdcf8;
+}
+
+.csi-no-result {
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #aaa;
+  text-align: center;
+}
+
+/* Mobile: full-width naturally since wrapper is 100% */
+@media (max-width: 480px) {
+  .csi-dropdown {
+    max-height: 200px;
+  }
+}

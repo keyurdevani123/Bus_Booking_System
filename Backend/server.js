@@ -7,7 +7,8 @@ const cors = require("cors");
 const corsOptions = require("./config/corsOptions");
 const connectDB = require("./config/dbconn");
 const mongoose = require("mongoose");
-const { task1 } = require("./jobs/DailyJob");
+const { task1, bookingOpen } = require("./jobs/DailyJob");
+const { checkNotificationTimeouts } = require("./controllers/waitlistController");
 const Admin = require("./model/Admin");
 const bcrypt = require("bcrypt");
 const sheduler = require("./utils/timeCheck");
@@ -17,10 +18,27 @@ const fs = require("fs");
 // Start the cron job
 task1.start();
 
+// On startup: ensure SeatAvailability docs exist for the next 4 days
+// (covers the gap when server restarts between daily cron runs)
+mongoose.connection.once("open", () => {
+  bookingOpen().catch((e) => console.error("bookingOpen startup error:", e));
+});
+
+// Check every 2 minutes: expire 30-min waitlist windows and notify next person
+setInterval(checkNotificationTimeouts, 2 * 60 * 1000);
+
 const PORT = process.env.PORT || 3200;
 const app = express();
 
 connectDB();
+
+// Keep Atlas free-tier from auto-pausing (pings every 4 minutes)
+mongoose.connection.once("open", () => {
+  setInterval(async () => {
+    try { await mongoose.connection.db.admin().ping(); } catch (_) {}
+  }, 4 * 60 * 1000);
+});
+
 app.use(logger);
 app.use(cors(corsOptions));
 
@@ -43,8 +61,8 @@ app.use("/webhook", rawBodyMiddleware, require("./routes/webhook"));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// Serve React frontend build if it exists
-const frontendBuildPath = path.join(__dirname, "..", "E-Ticket-Frontend", "build");
+// Serve React frontend build if it exists (run `npm run build` in Frontend/ first)
+const frontendBuildPath = path.join(__dirname, "..", "Frontend", "build");
 if (require("fs").existsSync(frontendBuildPath)) {
   app.use(express.static(frontendBuildPath));
 }
@@ -62,6 +80,7 @@ app.use("/api/getAllCities", require("./routes/api/getAllCities"));
 app.use("/api/cityRoute", require("./routes/api/getCityRoute"));
 app.use("/search", require("./routes/search"));
 app.use("/booking", require("./routes/booking"));
+app.use("/waitlist", require("./routes/waitlist"));
 //app.use("/completebooking", require("./routes/bookingcomplete"));
 app.use("/companies", require("./routes/api/getAllBusComapnies"));
 app.use("/api/getAllBusCompanies", require("./routes/api/getAllBusComapnies"));
@@ -90,22 +109,22 @@ mongoose.connection.once("open", () => {
   console.log("Database connected");
 
   // ── Startup: release any seats stuck in "processing" (take=2) ────────────
-  // Done entirely in MongoDB — no documents loaded into Node memory.
+  // Runs entirely in MongoDB via SeatAvailability collection.
   const releaseStuckProcessingSeats = async () => {
     try {
-      const Bus = require("./model/Bus");
-      const r1 = await Bus.updateMany(
-        { "seats.availability.booked.take.in": 2 },
-        { $set: { "seats.$[].availability.$[].booked.$[b].take.in": 0 } },
+      const SeatAvailability = require("./model/SeatAvailability");
+      const r1 = await SeatAvailability.updateMany(
+        { "booked.take.in": 2 },
+        { $set: { "booked.$[b].take.in": 0 } },
         { arrayFilters: [{ "b.take.in": 2 }] }
       );
-      const r2 = await Bus.updateMany(
-        { "seats.availability.booked.take.out": 2 },
-        { $set: { "seats.$[].availability.$[].booked.$[b].take.out": 0 } },
+      const r2 = await SeatAvailability.updateMany(
+        { "booked.take.out": 2 },
+        { $set: { "booked.$[b].take.out": 0 } },
         { arrayFilters: [{ "b.take.out": 2 }] }
       );
       const total = (r1.modifiedCount || 0) + (r2.modifiedCount || 0);
-      console.log(`Startup cleanup: released stuck processing seats in ${total} bus document(s).`);
+      console.log(`Startup cleanup: released stuck processing seats in ${total} SeatAvailability doc(s).`);
     } catch (err) {
       console.error("Startup cleanup error:", err);
     }

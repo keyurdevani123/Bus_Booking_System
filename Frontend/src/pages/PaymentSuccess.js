@@ -1,21 +1,33 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { bookingService } from '../services/api';
 import '../styles/PaymentSuccess.css';
 
 function PaymentSuccess() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const confirmed = useRef(false); // prevent double-call on StrictMode re-renders
 
-  const from       = params.get('from')      || '—';
-  const to         = params.get('to')        || '—';
-  const date       = params.get('date')      || '—';
-  const departure  = params.get('departure') || '—';
-  const arrival    = params.get('arrival')   || '—';
-  const seats      = params.get('seats')     || '—';
-  const price      = params.get('price')     || '—';
-  const bus        = params.get('bus')       || '—';
-  const busName    = params.get('name')      || '—';
-  const email      = params.get('email')     || '—';
+  const from       = params.get('from')        || '—';
+  const to         = params.get('to')          || '—';
+  const date       = params.get('date')        || '—';
+  const departure  = params.get('departure')   || '—';
+  const arrival    = params.get('arrival')     || '—';
+  const seats      = params.get('seats')       || '—';
+  const price      = params.get('price')       || '—';
+  const bus        = params.get('bus')         || '—';
+  const busName    = params.get('name')        || '—';
+  const email      = params.get('email')       || '—';
+  const tempBookId = params.get('tempBookId')  || '';
+
+  // Confirm booking on the backend (fallback for when Stripe webhook can't reach localhost)
+  useEffect(() => {
+    if (!tempBookId || confirmed.current) return;
+    confirmed.current = true;
+    bookingService.confirmBooking(tempBookId)
+      .then(() => console.log('Booking confirmed via success page'))
+      .catch((err) => console.error('Confirm booking error:', err));
+  }, [tempBookId]);
 
   const seatList = seats.split(',').join(', ');
 

@@ -5,6 +5,7 @@ import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import BusSearch from './pages/BusSearch';
 import Booking from './pages/Booking';
+import BookingHistory from './pages/BookingHistory';
 import Signup from './pages/Signup';
 import AdminDashboard from './pages/AdminDashboard';
 import Login from './pages/Login';
@@ -90,6 +91,9 @@ function App() {
           <Route path="/login"      element={<Login setUserToken={handleSetUserToken} setAdminToken={handleSetAdminToken} />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/my-bookings" element={
+            <PrivateRoute><BookingHistory /></PrivateRoute>
+          } />
           <Route path="/payment-success" element={
             <PrivateRoute><PaymentSuccess /></PrivateRoute>
           } />

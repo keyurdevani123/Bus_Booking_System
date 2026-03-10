@@ -572,3 +572,96 @@
   transform: scale(1.03);
   box-shadow: 0 3px 10px rgba(76,175,80,0.35);
 }
+
+/* ── Waitlist Section ─────────────────────────────────── */
+.waitlist-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.wl-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #fff3f3;
+  border: 1px solid #f44336;
+  border-left: 4px solid #f44336;
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.wl-banner-icon { font-size: 24px; flex-shrink: 0; }
+
+.wl-banner strong { display: block; color: #c62828; font-size: 16px; margin-bottom: 2px; }
+.wl-banner p { margin: 0; color: #555; font-size: 13px; }
+
+.wl-info {
+  margin: 0 0 4px;
+  color: #555;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.wl-btn {
+  background: linear-gradient(135deg, #ff9800, #f44336) !important;
+}
+.wl-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #e65100, #b71c1c) !important;
+  transform: translateY(-1px);
+}
+
+.wl-success {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #e8f5e9;
+  border: 1px solid #66bb6a;
+  border-left: 4px solid #2e7d32;
+  border-radius: 8px;
+  padding: 14px 16px;
+  color: #1b5e20;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.wl-success span { font-size: 20px; flex-shrink: 0; }
+
+/* Seats-wanted stepper */
+.wl-seat-stepper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+.wl-step-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid #c62828;
+  background: #fff;
+  color: #c62828;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wl-step-btn:hover:not(:disabled) {
+  background: #c62828;
+  color: #fff;
+}
+.wl-step-btn:disabled {
+  border-color: #ccc;
+  color: #ccc;
+  cursor: not-allowed;
+}
+.wl-step-val {
+  font-size: 16px;
+  font-weight: 600;
+  min-width: 72px;
+  text-align: center;
+  color: #333;
+}

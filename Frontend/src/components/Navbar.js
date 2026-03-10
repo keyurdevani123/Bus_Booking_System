@@ -16,7 +16,7 @@ function Navbar({ adminToken, userToken, onAdminLogout, onUserLogout }) {
       <div className="navbar-container">
         {/* Brand */}
         <Link to="/" className="navbar-brand" onClick={close}>
-          <span className="brand-icon">🚌</span>
+          <img src="https://static.vecteezy.com/system/resources/previews/024/474/342/large_2x/travel-bus-logo-template-with-white-background-suitable-for-your-design-need-logo-illustration-animation-etc-free-vector.jpg" alt="BusBazaar logo" className="brand-logo" />
           <span className="brand-name">Bus<span className="brand-accent">Bazaar</span></span>
         </Link>
 
@@ -24,6 +24,14 @@ function Navbar({ adminToken, userToken, onAdminLogout, onUserLogout }) {
         <ul className="navbar-menu">
           <li><Link to="/">Home</Link></li>
           <li><Link to="/search">Search Buses</Link></li>
+
+          {userToken && (
+            <li><Link to="/my-bookings" className="nav-bookings">My Bookings</Link></li>
+          )}
+
+          {adminToken && (
+            <li><Link to="/admin/dashboard" className="nav-dashboard">Dashboard</Link></li>
+          )}
 
           {!adminToken && !userToken && (
             <>
@@ -34,16 +42,13 @@ function Navbar({ adminToken, userToken, onAdminLogout, onUserLogout }) {
 
           {userToken && (
             <>
-              <li className="nav-welcome">👤 {userToken.name}</li>
+              <li><span className="nav-welcome">👤 {userToken.name}</span></li>
               <li><button onClick={handleUserLogout} className="nav-logout-btn">Logout</button></li>
             </>
           )}
 
           {adminToken && (
-            <>
-              <li><Link to="/admin/dashboard" className="nav-dashboard">Dashboard</Link></li>
-              <li><button onClick={handleAdminLogout} className="nav-logout-btn">Logout</button></li>
-            </>
+            <li><button onClick={handleAdminLogout} className="nav-logout-btn">Logout</button></li>
           )}
 
         </ul>
@@ -60,6 +65,14 @@ function Navbar({ adminToken, userToken, onAdminLogout, onUserLogout }) {
           <Link to="/" onClick={close}>Home</Link>
           <Link to="/search" onClick={close}>Search Buses</Link>
 
+          {userToken && (
+            <Link to="/my-bookings" onClick={close} className="nav-bookings-mobile">🎟️ My Bookings</Link>
+          )}
+
+          {adminToken && (
+            <Link to="/admin/dashboard" onClick={close}>Dashboard</Link>
+          )}
+
           {!adminToken && !userToken && (
             <>
               <Link to="/signup" onClick={close}>Sign Up</Link>
@@ -75,10 +88,7 @@ function Navbar({ adminToken, userToken, onAdminLogout, onUserLogout }) {
           )}
 
           {adminToken && (
-            <>
-              <Link to="/admin/dashboard" onClick={close}>Dashboard</Link>
-              <button onClick={handleAdminLogout} className="mobile-logout">Logout</button>
-            </>
+            <button onClick={handleAdminLogout} className="mobile-logout">Logout</button>
           )}
 
         </div>

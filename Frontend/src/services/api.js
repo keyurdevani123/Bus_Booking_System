@@ -54,6 +54,18 @@ export const busService = {
 
 // Booking Services
 export const bookingService = {
+  confirmBooking: (tempBookId) =>
+    api.post(`/booking/confirm/${tempBookId}`),
+  getUserBookingHistory: (email, userId, phone) => {
+    const params = new URLSearchParams();
+    if (email)  params.append('email',  email);
+    if (userId) params.append('userId', userId);
+    if (phone)  params.append('phone',  phone);
+    return api.get(`/booking/user/history?${params.toString()}`);
+  },
+
+  cancelBooking: (bookingId) =>
+    api.delete(`/booking/${bookingId}`),
   createBooking: (bookingData, token) =>
     api.post('/booking', bookingData, {
       headers: { Authorization: `Bearer ${token}` },
@@ -81,6 +93,18 @@ export const cityRouteService = {
 // Bus Company Services
 export const companyService = {
   getAllCompanies: () => api.get('/api/getAllBusCompanies'),
+};
+
+// Waitlist Services
+export const waitlistService = {
+  join: (data) => api.post('/waitlist', data),
+  getUserWaitlist: (email, userId) => {
+    const params = new URLSearchParams();
+    if (email)  params.append('email',  email);
+    if (userId) params.append('userId', userId);
+    return api.get(`/waitlist/user?${params.toString()}`);
+  },
+  leave: (id) => api.delete(`/waitlist/${id}`),
 };
 
 export default api;

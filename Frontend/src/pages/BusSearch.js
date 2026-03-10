@@ -1,21 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { busService, cityService } from '../services/api';
+import CitySearchInput from '../components/CitySearchInput';
 import '../styles/BusSearch.css';
 
 // ── helpers ─────────────────────────────────────────────────
-const SS_KEY = 'busSearchState';
+const SS_KEY       = 'busSearchState';
+const LS_CACHE_KEY = 'busSearchCache';
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const readSS = (key, fallback) => {
   try { return JSON.parse(sessionStorage.getItem(SS_KEY) || '{}')[key] ?? fallback; }
   catch { return fallback; }
 };
+// Read the search cache synchronously (used in lazy useState initializers)
+const readSearchCache = () => {
+  try {
+    const c = JSON.parse(localStorage.getItem(LS_CACHE_KEY) || 'null');
+    if (c && Array.isArray(c.buses) && c.buses.length > 0 &&
+        Date.now() - c.fetchedAt < CACHE_TTL_MS) return c;
+  } catch {}
+  return null;
+};
 
 function BusSearch() {
   const today = new Date().toISOString().split('T')[0];
-  const [from,  setFrom]  = useState(() => readSS('from', ''));
-  const [to,    setTo]    = useState(() => readSS('to', ''));
-  const [date,  setDate]  = useState(today);   // always default today – stale dates break the form
-  const [buses, setBuses] = useState([]);
+  // Restore previous search instantly from localStorage (no API wait needed)
+  const [from,  setFrom]  = useState(() => { const c = readSearchCache(); return c?.from || readSS('from', ''); });
+  const [to,    setTo]    = useState(() => { const c = readSearchCache(); return c?.to   || readSS('to',   ''); });
+  const [date,  setDate]  = useState(() => { const c = readSearchCache(); return c?.date || today; });
+  const [buses, setBuses] = useState(() => { const c = readSearchCache(); return c?.buses || []; });
   const [cities, setCities] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -34,9 +47,30 @@ function BusSearch() {
         const response = await cityService.getAllCities();
         const list = Array.isArray(response.data) ? response.data : [];
         setCities(list);
-        // Validate restored values against current city list
-        if (from && !list.includes(from)) setFrom('');
-        if (to   && !list.includes(to))   setTo('');
+
+        // Validate current from/to against the city list (they may have been restored
+        // from the localStorage cache, so sessionStorage may not have them yet).
+        // Use current state values as the source of truth; clear only if the city
+        // genuinely doesn't exist in the list.
+        const resolvedFrom = from && list.includes(from) ? from : '';
+        const resolvedTo   = to   && list.includes(to)   ? to   : '';
+        if (resolvedFrom !== from) setFrom(resolvedFrom);
+        if (resolvedTo   !== to)   setTo(resolvedTo);
+        // Keep sessionStorage in sync so the persist effect doesn't lag
+        try { sessionStorage.setItem(SS_KEY, JSON.stringify({ from: resolvedFrom, to: resolvedTo })); } catch {}
+
+        // Auto-search if redirected from Home page
+        const triggerRaw = sessionStorage.getItem('busSearchTrigger');
+        if (triggerRaw && resolvedFrom && resolvedTo && resolvedFrom !== resolvedTo) {
+          sessionStorage.removeItem('busSearchTrigger');
+          try {
+            const trigger = JSON.parse(triggerRaw);
+            const searchDate = trigger.date || new Date().toISOString().split('T')[0];
+            setDate(searchDate);
+            await performSearch(resolvedFrom, resolvedTo, searchDate);
+          } catch {}
+        }
+        // (cache already restored synchronously in useState initializers)
       } catch (err) {
         console.log('Cities load failed');
         setCities([]);
@@ -46,24 +80,28 @@ function BusSearch() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSearch = async (e) => {
-    e.preventDefault();
-    setFormError('');
-    if (!from) { setFormError('Please select a departure city.'); return; }
-    if (!to)   { setFormError('Please select a destination city.'); return; }
-    if (from === to) { setFormError('Departure and destination cities must be different.'); return; }
+  const performSearch = async (f, t, d) => {
     setLoading(true);
     setError('');
     setBuses([]);
-
     try {
-      const isToday = new Date(date).toDateString() === new Date().toDateString();
-      const response = await busService.searchBuses(from, to, date, isToday);
+      const isToday = new Date(d).toDateString() === new Date().toDateString();
+      const response = await busService.searchBuses(f, t, d, isToday);
       const data = response.data;
       if (response.status === 204 || !data || (Array.isArray(data) && data.length === 0)) {
         setError('No buses found for this route. Try another date or route.');
       } else if (Array.isArray(data)) {
         setBuses(data);
+        // Cache results for back/refresh
+        try {
+          localStorage.setItem(LS_CACHE_KEY, JSON.stringify({
+            buses: data,
+            from: f,
+            to: t,
+            date: d,
+            fetchedAt: Date.now(),
+          }));
+        } catch {}
       } else {
         setError('No buses found for this route. Try another date or route.');
       }
@@ -73,6 +111,15 @@ function BusSearch() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    setFormError('');
+    if (!from) { setFormError('Please select a departure city.'); return; }
+    if (!to)   { setFormError('Please select a destination city.'); return; }
+    if (from === to) { setFormError('Departure and destination cities must be different.'); return; }
+    await performSearch(from, to, date);
   };
 
   // Returns full route slice from origin to destination inclusive (with km via halts)
@@ -92,23 +139,30 @@ function BusSearch() {
         <form onSubmit={handleSearch}>
           <div className="form-row">
             <div className="form-group">
-              <label>From</label>
-              <select value={from} onChange={(e) => { setFrom(e.target.value); setFormError(''); }}>
-                <option value="">Select departure city</option>
-                {cities.map((city) => (
-                  <option key={city} value={city}>{city}</option>
-                ))}
-              </select>
+              <label htmlFor="city-from">From</label>
+              <CitySearchInput
+                id="city-from"
+                value={from}
+                onChange={(city) => { setFrom(city); setFormError(''); }}
+                cities={cities}
+                placeholder="Departure city"
+              />
             </div>
-            <div className="form-swap">⇄</div>
+            <button
+              type="button"
+              className="form-swap"
+              title="Swap cities"
+              onClick={() => { setFrom(to); setTo(from); setFormError(''); }}
+            >⇄</button>
             <div className="form-group">
-              <label>To</label>
-              <select value={to} onChange={(e) => { setTo(e.target.value); setFormError(''); }}>
-                <option value="">Select destination city</option>
-                {cities.map((city) => (
-                  <option key={city} value={city}>{city}</option>
-                ))}
-              </select>
+              <label htmlFor="city-to">To</label>
+              <CitySearchInput
+                id="city-to"
+                value={to}
+                onChange={(city) => { setTo(city); setFormError(''); }}
+                cities={cities}
+                placeholder="Destination city"
+              />
             </div>
             <div className="form-group">
               <label>Date</label>
@@ -231,8 +285,7 @@ function BusSearch() {
                   : <span className="full">Fully Booked</span>}
               </div>
               <button
-                className="book-btn"
-                disabled={bus.totalAvailableSeats === 0}
+                className={`book-btn${bus.totalAvailableSeats === 0 ? ' book-btn-waitlist' : ''}`}
                 onClick={() => {
                   try { sessionStorage.setItem('bookingBus', JSON.stringify({ bus, date, from, to })); } catch {}
                   navigate(
@@ -241,7 +294,7 @@ function BusSearch() {
                   );
                 }}
               >
-                View Seats
+                {bus.totalAvailableSeats === 0 ? '🔔 Join Waitlist' : 'View Seats'}
               </button>
             </div>
           </div>

@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 const QRCode = require("qrcode");
 const PDFDocument = require("pdfkit");
 
@@ -31,8 +32,8 @@ function generateQRCodeAndPDF(
     `BUS:${bus_number}`,
     `FARE:Rs.${price}`,
   ].join("\n");
-  const qrPath = "/tmp/qrcode.png";
-  const pdfPath = `/tmp/${tempBookId}.pdf`;
+  const qrPath  = path.join(os.tmpdir(), "qrcode.png");
+  const pdfPath  = path.join(os.tmpdir(), `${tempBookId}.pdf`);
 
   return new Promise((resolve, reject) => {
     QRCode.toFile(qrPath, qrCodeData, { width: 150, margin: 1 }, function (err) {

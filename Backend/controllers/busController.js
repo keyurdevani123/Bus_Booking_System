@@ -1,4 +1,5 @@
 const Bus = require("../model/Bus");
+const SeatAvailability = require("../model/SeatAvailability");
 const Booking = require("../model/Booking");
 const asyncHandler = require("express-async-handler");
 const fsPromises = require("fs").promises;
@@ -138,63 +139,42 @@ const addBus = asyncHandler(async (req, res) => {
   });
 
   // noOfAlocatedSeats = reserved/driver seats (non-bookable), rest are bookable
-  const bookedArray = routeVariable.map((obj) => ({
-    city: obj.city,
-    taken: false,
-  }));
-
   for (let i = 1; i <= capacity; i++) {
-    if (i <= noOfAlocatedSeats) {
-      bus.seats.push({
-        seatNumber: i,
-        isBookable: false,
-        availability: [],
-      });
-    } else {
-        bus.seats.push({
-          seatNumber: i,
-          isBookable: true,
-          availability: Array.from({ length: 30 }, (_, d) => {
-            // create availability entries for the next 30 days according to selectedDays
-            if (
-              selectedDaysVar[weekdayOrWeekendFinder(dayjs().add(d, "day"))] ===
-              true
-            ) {
-              // deep-copy bookedArray for each availability
-              const bookedCopy = bookedArray.map((b) => ({ city: b.city, taken: b.taken }));
-              return {
-                date: dayjs().add(d, "day").format("YYYY-MM-DD"),
-                booked: bookedCopy,
-              };
-            }
-          }).filter(Boolean),
-        });
-    }
+    bus.seats.push({
+      seatNumber: i,
+      isBookable: i > noOfAlocatedSeats,
+    });
   }
 
   req.files.map((file) => {
     bus.imagesURLs.push(file.filename);
   });
 
-  // Populate availability for bookable seats for next 30 days if missing
-  if (bus.seats && bus.seats.length) {
-    const anyMissing = bus.seats.some(s => s.isBookable && (!s.availability || !s.availability.length));
-    if (anyMissing) {
-      const bookedArrayLocal = bus.route.map((obj) => ({ city: obj.city, taken: false }));
-      bus.seats.forEach((s) => {
-        if (s.isBookable && (!s.availability || !s.availability.length)) {
-          s.availability = Array.from({ length: 30 }, (_, d) => ({
-            date: dayjs().add(d, 'day').format('YYYY-MM-DD'),
-            booked: bookedArrayLocal.map(b => ({ city: b.city, taken: b.taken })),
-          }));
-        }
-      });
-    }
-  }
-
   const savedBus = await bus.save();
 
   if (savedBus) {
+    // Create SeatAvailability docs for all bookable seats for next 30 days
+    const routeBooked = routeVariable.map((o) => ({
+      city: o.city,
+      take: { in: 0, out: 0 },
+    }));
+    const saDocsToCreate = [];
+    for (let d = 0; d < 30; d++) {
+      const dd = dayjs().add(d, "day");
+      if (!selectedDaysVar[weekdayOrWeekendFinder(dd)]) continue;
+      const dateStr = dd.format("YYYY-MM-DD");
+      for (let i = noOfAlocatedSeats + 1; i <= capacity; i++) {
+        saDocsToCreate.push({
+          busId: savedBus._id,
+          date: dateStr,
+          seatNumber: i,
+          booked: routeBooked.map((b) => ({ city: b.city, take: { in: 0, out: 0 } })),
+        });
+      }
+    }
+    if (saDocsToCreate.length) {
+      await SeatAvailability.insertMany(saDocsToCreate, { ordered: false });
+    }
     res.status(201).json({ message: "Bus added successfully" });
   } else {
     res.sendStatus(500);
@@ -293,31 +273,11 @@ const updateBus = asyncHandler(async (req, res) => {
     // ignore parse errors
   }
 
-  // ── Always sync seats with current capacity / reserved count ─────────────
+  // ── Sync seats with current capacity / reserved count ────────────────────
   {
-    const existingMap = {};
-    bus.seats.forEach((s) => { existingMap[s.seatNumber] = s; });
-
-    const freshAvail = () =>
-      Array.from({ length: 30 }, (_, d) => ({
-        date: dayjs().add(d, 'day').format('YYYY-MM-DD'),
-        booked: bus.route.map((r) => ({ city: r.city, take: { in: 0, out: 0 } })),
-      }));
-
     const newSeats = [];
     for (let i = 1; i <= newCapacity; i++) {
-      const isReserved = i <= newReserved;
-      const prev = existingMap[i];
-      if (isReserved) {
-        newSeats.push({ seatNumber: i, isBookable: false, availability: [] });
-      } else {
-        // Preserve existing availability if the seat was already bookable
-        const availability =
-          prev && prev.isBookable && prev.availability && prev.availability.length
-            ? prev.availability
-            : freshAvail();
-        newSeats.push({ seatNumber: i, isBookable: true, availability });
-      }
+      newSeats.push({ seatNumber: i, isBookable: i > newReserved });
     }
     bus.seats = newSeats;
     console.log(`Seats synced: ${newCapacity} total, ${newReserved} reserved, ${newCapacity - newReserved} bookable`);
@@ -330,6 +290,37 @@ const updateBus = asyncHandler(async (req, res) => {
   });
 
   await bus.save();
+
+  // Create SeatAvailability docs for any newly added bookable seats
+  const existingSeatsInAvail = await SeatAvailability.distinct("seatNumber", { busId: busId });
+  const newBookableNums = bus.seats
+    .filter((s) => s.isBookable)
+    .map((s) => s.seatNumber)
+    .filter((n) => !existingSeatsInAvail.includes(n));
+
+  if (newBookableNums.length) {
+    const routeBooked = bus.route.map((r) => ({ city: r.city, take: { in: 0, out: 0 } }));
+    const saOps = [];
+    for (let d = 0; d < 30; d++) {
+      const dd = dayjs().add(d, "day");
+      if (!bus.selectedDays[weekdayOrWeekendFinder(dd)]) continue;
+      const dateStr = dd.format("YYYY-MM-DD");
+      for (const seatNum of newBookableNums) {
+        saOps.push({
+          busId: bus._id,
+          date: dateStr,
+          seatNumber: seatNum,
+          booked: routeBooked.map((b) => ({ city: b.city, take: { in: 0, out: 0 } })),
+        });
+      }
+    }
+    if (saOps.length) {
+      await SeatAvailability.insertMany(saOps, { ordered: false }).catch((e) => {
+        if (e.code !== 11000) throw e;
+      });
+    }
+  }
+
   res.json({ message: 'Bus updated successfully' });
 });
 

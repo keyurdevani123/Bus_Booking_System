@@ -1,4 +1,5 @@
 const Bus = require("../model/Bus");
+const SeatAvailability = require("../model/SeatAvailability");
 const Booking = require("../model/Booking");
 const asyncHandler = require("express-async-handler");
 const dayjs = require("dayjs");
@@ -18,35 +19,23 @@ const getAllAuthBusesController = asyncHandler(async (req, res) => {
 
   const today = dayjs().format("YYYY-MM-DD");
 
-  const busesWithTodayBookings = [];
-  buses.map((bus) => {
-    const objectArray = bus.seats[bus.seats.length - 1].availability;
+  // A bus runs today if it has at least one SeatAvailability doc for today
+  const busIds = buses.map((b) => b._id);
+  const todayDocs = await SeatAvailability.find({ busId: { $in: busIds }, date: today })
+    .distinct("busId");
 
-    for (let i = 0; i < objectArray.length; i++) {
-      if (objectArray[i].date === today) {
-        busesWithTodayBookings.push(bus);
-        break;
-      }
-    }
-  });
+  const todayBusIdSet = new Set(todayDocs.map(String));
+  const busesWithTodayBookings = buses.filter((b) => todayBusIdSet.has(String(b._id)));
 
-  if (busesWithTodayBookings.length === 0) {
+  if (!busesWithTodayBookings.length) {
     return res.sendStatus(204);
   }
 
-  //console.log(busesWithTodayBookings);
   const busesWithTodayBookingsAndDetails = [];
-  for (let i = 0; i < busesWithTodayBookings.length; i++) {
-    const bus = busesWithTodayBookings[i];
+  for (const bus of busesWithTodayBookings) {
     const bookings = await Booking.find({ busId: bus._id, mappedDate: today });
     bus.noOfBookings = bookings.length;
-    if (bookings.length !== 0) {
-      bus.haveToCheck = bookings.reduce((acc, booking) => {
-        return acc + (booking.isChecked ? 0 : 1);
-      }, 0);
-    } else {
-      bus.haveToCheck = 0;
-    }
+    bus.haveToCheck = bookings.reduce((acc, b) => acc + (b.isChecked ? 0 : 1), 0);
     busesWithTodayBookingsAndDetails.push(bus);
   }
 

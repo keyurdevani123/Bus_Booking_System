@@ -1,74 +1,56 @@
 const paymentStore = require("../db/store");
 const dayjs = require("dayjs");
-const Bus = require("../model/Bus");
+const SeatAvailability = require("../model/SeatAvailability");
 const convertTimeToFloat = require("./convertTimeToFloat");
+
+const resolveAvailDate = (date, busDepartureTime, departureTime) => {
+  if (convertTimeToFloat(busDepartureTime) <= convertTimeToFloat(departureTime)) {
+    return date;
+  }
+  return dayjs(date).subtract(1, "day").format("YYYY-MM-DD");
+};
 
 async function checkTimeOut() {
   console.log("checking for timeout at", new Date());
   const currentTime = dayjs();
 
-  //for all keys in paymentStore
   for (const key in paymentStore) {
     const { createdAt } = paymentStore[key];
     const createdAtTime = dayjs(createdAt);
 
-    //expired after 5 minutes
     if (currentTime.diff(createdAtTime, "minute") > 5) {
-      //timeout after 1 minute
       const { busId, seats, date, from, to, busDepartureTime, departureTime } =
         paymentStore[key];
 
-      const bus = await Bus.findById(busId);
-      //make that seats as processing
-      const seatSplit = seats.split(",");
-      const seatNumbers = seatSplit.map(Number);
-      const seatsObjectArray = bus.seats.filter((seat) =>
-        seatNumbers.includes(seat.seatNumber)
-      );
-      //for all seats
-      for (let i = 0; i < seatsObjectArray.length; i++) {
-        const seatObj = seatsObjectArray[i]; //take one seat
-        //object inside availability where date is equal to date
+      const seatNumbers = seats.split(",").map(Number);
+      const availDate = resolveAvailDate(date, busDepartureTime, departureTime);
 
-        let availability = {};
-        if (
-          convertTimeToFloat(busDepartureTime) <=
-          convertTimeToFloat(departureTime)
-        ) {
-          availability = seatObj.availability.find((obj) => obj.date === date);
-        } else {
-          availability = seatObj.availability.find(
-            (obj) =>
-              obj.date === dayjs(date).subtract(1, "day").format("YYYY-MM-DD")
-          );
-        }
+      const availDocs = await SeatAvailability.find({
+        busId,
+        date: availDate,
+        seatNumber: { $in: seatNumbers },
+      });
 
-        console.log(availability); //availability is a object
-        if (!availability) {
-          return res.sendStatus(404);
-        }
-        //object inside booked where city is equal to from
-        for (let j = 0; j < availability.booked.length; j++) {
-          if (availability.booked[j].city !== from) {
-            continue;
-          }
+      for (const avail of availDocs) {
+        for (let j = 0; j < avail.booked.length; j++) {
+          if (avail.booked[j].city !== from) continue;
 
-          availability.booked[j].take.out = 0;
+          avail.booked[j].take.out = 0;
 
-          for (let k = j + 1; k < availability.booked.length; k++) {
-            if (availability.booked[k].city === to) {
-              availability.booked[j].take.in = 0;
-
+          for (let k = j + 1; k < avail.booked.length; k++) {
+            if (avail.booked[k].city === to) {
+              avail.booked[k].take.in = 0;
               break;
             }
-            availability.booked[j].take.out = 0;
-            availability.booked[j].take.in = 0;
+            avail.booked[k].take.in = 0;
+            avail.booked[k].take.out = 0;
           }
           break;
         }
+        if (!avail.isModified()) continue; // skip save if nothing changed
+        await avail.save();
       }
 
-      await bus.save();
       console.log("Timeout", key);
       delete paymentStore[key];
     }
@@ -77,7 +59,7 @@ async function checkTimeOut() {
 
 function sheduler() {
   console.log("sheduler running");
-  setInterval(checkTimeOut, 1 * 30 * 1000); //sheduler will run every 30 seconds
+  setInterval(checkTimeOut, 1 * 30 * 1000);
 }
 
 module.exports = sheduler;

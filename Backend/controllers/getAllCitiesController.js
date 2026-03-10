@@ -1,10 +1,16 @@
 const asyncHandler = require("express-async-handler");
 const Bus = require("../model/Bus");
+const City = require("../model/City");
 const CITY_ROUTE = require("../utils/cityRoute");
 const getAllCities = asyncHandler(async (req, res) => {
-  const buses = await Bus.find().select("route busFrom busTo").lean();
+  const [buses, dbCities] = await Promise.all([
+    Bus.find().select("route busFrom busTo").lean(),
+    City.find().select("name").lean(),
+  ]);
   const citySet = new Set();
-  // Always include all predefined cities — works even when no buses are in DB yet
+  // Cities from the City collection (seeded 120+ Gujarat/Maharashtra cities)
+  dbCities.forEach(c => citySet.add(c.name));
+  // Always include all predefined corridor cities — works even when no buses are in DB yet
   CITY_ROUTE.forEach(c => citySet.add(c.city));
   // Also include any cities from manually-added buses not in the master list
   if (buses && buses.length) {

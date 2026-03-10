@@ -1,69 +1,62 @@
 const cron = require("node-cron");
 const Bus = require("../model/Bus");
+const SeatAvailability = require("../model/SeatAvailability");
 const asyncHandler = require("express-async-handler");
 const dayjs = require("dayjs");
 const weekdayOrWeekendFinder = require("../utils/weekdayOrWeekendFinder");
 const Booking = require("../model/Booking");
+const Waitlist = require("../model/Waitlist");
 const fsPromises = require("fs").promises;
+const os = require("os");
 
 const bookingOpen = asyncHandler(async () => {
-  const buses = await Bus.find();
-  if (!buses) {
-    return;
+  // Load buses — tiny now that seats carry no availability
+  const buses = await Bus.find()
+    .select("_id route selectedDays freezedDays seats")
+    .lean();
+  if (!buses || !buses.length) return;
+
+  const saOps = [];
+
+  for (const bus of buses) {
+    const bookableSeats = bus.seats.filter((s) => s.isBookable);
+    if (!bookableSeats.length) continue;
+
+    const routeBooked = bus.route.map((r) => ({
+      city: r.city,
+      take: { in: 0, out: 0 },
+    }));
+
+    for (let i = 0; i < 4; i++) {
+      const d = dayjs().add(i, "day");
+      const dateStr = d.format("YYYY-MM-DD");
+
+      if (!bus.selectedDays[weekdayOrWeekendFinder(d)]) continue;
+      if (bus.freezedDays && bus.freezedDays.includes(dateStr)) continue;
+
+      for (const seat of bookableSeats) {
+        saOps.push({
+          updateOne: {
+            filter: { busId: bus._id, date: dateStr, seatNumber: seat.seatNumber },
+            update: {
+              // $setOnInsert: only sets fields when the doc is NEW — existing bookings are untouched
+              $setOnInsert: { booked: routeBooked },
+            },
+            upsert: true,
+          },
+        });
+      }
+    }
   }
-  if (!buses.length) {
-    return;
+
+  // Remove stale availability docs (older than 2 days before today)
+  const cutoff = dayjs().subtract(2, "day").format("YYYY-MM-DD");
+  await SeatAvailability.deleteMany({ date: { $lt: cutoff } });
+
+  if (saOps.length) {
+    await SeatAvailability.bulkWrite(saOps, { ordered: false });
+    console.log(`bookingOpen: ${saOps.length} seat-date slots ensured`);
   }
-
-  //going through each bus we found above and use that details to update the new bus using bulkWrite method
-  const operations = buses.map((bus) => ({
-    updateOne: {
-      filter: { _id: bus._id },
-      update: {
-        $set: {
-          seats: bus.seats.map((seat) => {
-            if (seat.isBookable) {
-              for (let i = 0; i < 4; i++) {
-                if (
-                  bus.selectedDays[
-                    weekdayOrWeekendFinder(dayjs().add(i, "day"))
-                  ] === true &&
-                  seat.availability.find(
-                    (obj) =>
-                      obj.date === dayjs().add(i, "day").format("YYYY-MM-DD")
-                  ) === undefined &&
-                  !bus.freezedDays.includes(
-                    dayjs().add(i, "day").format("YYYY-MM-DD")
-                  )
-                ) {
-                  seat.availability.push({
-                    date: dayjs().add(i, "day").format("YYYY-MM-DD"),
-                    booked: seat.availability[0].booked.map((obj) => {
-                      return {
-                        city: obj.city,
-                        take: {
-                          in: 0,
-                          out: 0,
-                        },
-                      };
-                    }),
-                  });
-                }
-              }
-
-              //remove objects that happen before 2 days to the current date ( others will be removed)
-              seat.availability = seat.availability.filter((obj) => {
-                return dayjs(obj.date).diff(dayjs(), "day") >= -2;
-              });
-            }
-            return seat;
-          }),
-        },
-      },
-    },
-  }));
-
-  await Bus.bulkWrite(operations);
 });
 
 //delete the booking after 3 days
@@ -98,15 +91,29 @@ const deleteFreezeDays = asyncHandler(async () => {
 //delete pdfs after 3 days
 const deletePDFs = async () => {
   const threeDaysAgo = dayjs().subtract(3, "day").format("YYYY-MM-DD");
-  const files = await fsPromises.readdir("/tmp");
+  const tmpDir = os.tmpdir();
+  const files = await fsPromises.readdir(tmpDir);
   const pdfFiles = files.filter((f) => f.endsWith(".pdf"));
   pdfFiles.forEach(async (file) => {
     if (file.includes(threeDaysAgo)) {
       console.log(`Deleted ${file}`);
-      await fsPromises.unlink(`/tmp/${file}`);
+      await fsPromises.unlink(require("path").join(tmpDir, file));
     }
   });
 };
+
+// Expire waitlist entries whose travel date has already passed
+// (handles both 'waiting' and 'notified' — if the date passed they'll never book)
+const expireWaitlist = asyncHandler(async () => {
+  const today = dayjs().format("YYYY-MM-DD");
+  const result = await Waitlist.updateMany(
+    { date: { $lt: today }, status: { $in: ["waiting", "notified"] } },
+    { $set: { status: "expired" } }
+  );
+  if (result.modifiedCount > 0) {
+    console.log(`Expired ${result.modifiedCount} waitlist entries for past dates.`);
+  }
+});
 
 const task1 = cron.schedule(
   "48 08 * * *",
@@ -115,6 +122,7 @@ const task1 = cron.schedule(
     deleteBooking();
     deleteFreezeDays();
     deletePDFs();
+    expireWaitlist();
     console.log(
       `Booking open until ${dayjs().add(3, "day").format("YYYY-MM-DD")}`
     );
@@ -127,4 +135,5 @@ const task1 = cron.schedule(
 
 module.exports = {
   task1,
+  bookingOpen,
 };

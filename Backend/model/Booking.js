@@ -54,6 +54,21 @@ const bookingSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  userId: {
+    type: String,
+    default: "",
+  },
+  // 'forward' = normal direction, 'return' = return trip (bidirectional bus)
+  direction: {
+    type: String,
+    enum: ["forward", "return"],
+    default: "forward",
+  },
 });
+
+// ── Indexes for getUserBookingHistory query performance ─────────────────────
+bookingSchema.index({ email: 1, date: -1 });
+bookingSchema.index({ userId: 1, date: -1 });
+bookingSchema.index({ phone: 1,  date: -1 });
 
 module.exports = mongoose.model("Booking", bookingSchema);

@@ -1,9 +1,11 @@
 const Bus = require("../model/Bus");
+const SeatAvailability = require("../model/SeatAvailability");
 const asyncHandler = require("express-async-handler");
 
 const priceByNoOfHalts = require("../utils/priceByNoOfHalts");
 const dayjs = require("dayjs");
 const convertTimeToFloat = require("../utils/convertTimeToFloat");
+
 const search = asyncHandler(async (req, res) => {
   const { from, to, date, isToday } = req.body;
 
@@ -16,7 +18,7 @@ const search = asyncHandler(async (req, res) => {
   if (isToday && dayjs(date).isBefore(dayjs(), "day"))
     return res.status(400).json({ message: "Past dates cannot be booked" });
 
-  //if the date is yesterday then return empty array because buses are started its journey
+  // Yesterday's buses have already departed — nothing to show
   if (
     !isToday &&
     dayjs(date).format("YYYY-MM-DD") ===
@@ -25,17 +27,19 @@ const search = asyncHandler(async (req, res) => {
     return res.json([]);
   }
 
-  const buses = await Bus.find();
+  // ── 1. Load only buses whose route covers both cities (indexed lookup) ──────
+  // routeCities is a denormalized [String] array kept in sync by Bus pre-save hook.
+  // This pushes filtering to MongoDB (index scan) instead of loading all buses.
+  const buses = await Bus.find({ routeCities: { $all: [from, to] } }).lean();
   if (!buses) return res.sendStatus(404);
 
+  // ── 2. Keep only buses whose route covers from → to (from before to) ───────
   const busesArray = [];
-
   buses.forEach((bus) => {
     for (let i = 0; i < bus.route.length; i++) {
       if (bus.route[i].city === from) {
         for (let j = i + 1; j < bus.route.length; j++) {
           if (bus.route[j].city === to) {
-            // Bus has this route segment — include it (availability checked per-seat below)
             busesArray.push(bus);
             break;
           }
@@ -47,38 +51,42 @@ const search = asyncHandler(async (req, res) => {
 
   if (!busesArray.length) return res.sendStatus(204);
 
-  //sorting the busesArray by departureTime at the searched city
+  // ── 3. Sort by departure time from the searched city ──────────────────────
   let sortedArray = busesArray.sort(
     (a, b) =>
       convertTimeToFloat(a.route.find((obj) => obj.city === from).departureTime) -
       convertTimeToFloat(b.route.find((obj) => obj.city === from).departureTime)
   );
 
-  //setting the searchedDepartureTime, searchedArrivalTime, thisBusPrice, actualPrice
+  // ── 4. Enrich each bus with price, searched departure/arrival times ────────
   for (let i = 0; i < sortedArray.length; i++) {
-    let bus = sortedArray[i].toObject();
+    let bus = sortedArray[i];
     bus.route.forEach((obj) => {
       if (obj.city === from) {
         bus = {
           ...bus,
           searchedDepartureTime: obj.departureTime,
-          _fromHalts: obj.halts, // store so we can compute sub-route distance
+          _fromHalts: obj.halts,
         };
       }
       if (obj.city === to) {
         const haltsDiff = Math.max(1, obj.halts - (bus._fromHalts || 0));
         let thisBusPrice;
         if (bus.baseFare && bus.totalRouteKm) {
-          // Proportional pricing: price = baseFare * (sub-route km / total route km)
           const fraction = haltsDiff / bus.totalRouteKm;
           thisBusPrice = Math.max(30, Math.round(bus.baseFare * fraction));
         } else {
-          // Fallback to halts lookup table
-          let actualLookup = priceByNoOfHalts[haltsDiff] ||
-            priceByNoOfHalts[Object.keys(priceByNoOfHalts).reduce((a,b) =>
-              Math.abs(b - haltsDiff) < Math.abs(a - haltsDiff) ? b : a)];
-          thisBusPrice = haltsDiff > bus.minHalts ? actualLookup :
-            (priceByNoOfHalts[bus.minHalts] || actualLookup);
+          let actualLookup =
+            priceByNoOfHalts[haltsDiff] ||
+            priceByNoOfHalts[
+              Object.keys(priceByNoOfHalts).reduce((a, b) =>
+                Math.abs(b - haltsDiff) < Math.abs(a - haltsDiff) ? b : a
+              )
+            ];
+          thisBusPrice =
+            haltsDiff > bus.minHalts
+              ? actualLookup
+              : priceByNoOfHalts[bus.minHalts] || actualLookup;
         }
         bus = {
           ...bus,
@@ -92,103 +100,99 @@ const search = asyncHandler(async (req, res) => {
     sortedArray[i] = bus;
   }
 
-  //remove buses when user searches for today and the bus has already departed from the searched city
+  // ── 5. Drop buses that have already departed (today searches only) ─────────
   if (
     dayjs(date).format("YYYY-MM-DD") === dayjs().format("YYYY-MM-DD") &&
     isToday
   ) {
-    sortedArray = sortedArray.filter((bus) => {
-      return (
+    sortedArray = sortedArray.filter(
+      (bus) =>
         convertTimeToFloat(bus.searchedDepartureTime) >=
         convertTimeToFloat(dayjs().format("HH:mm"))
-      );
-    });
+    );
   }
 
   if (!sortedArray.length) return res.sendStatus(204);
 
-  let arrayOfBussesAfterAvailableSeatsChecking = [];
-  //finding no of seats available and give property to each seat as availabilityBoolean
+  // ── 6. Fetch SeatAvailability for all matched buses on the searched date ───
+  // Single targeted query instead of loading all embedded arrays
+  const dateStr = dayjs(date).format("YYYY-MM-DD");
+  const busIds = sortedArray.map((b) => b._id);
+  const availDocs = await SeatAvailability.find({
+    busId: { $in: busIds },
+    date: dateStr,
+  }).lean();
 
-  for (let i = 0; i < sortedArray.length; i++) {
-    let bus = sortedArray[i];
+  // Build map: `${busId}_${seatNumber}` → booked[]
+  const availMap = {};
+  availDocs.forEach((doc) => {
+    availMap[`${doc.busId}_${doc.seatNumber}`] = doc.booked;
+  });
+
+  // ── 7. Compute availabilityBoolean per seat, count free seats ─────────────
+  const result = sortedArray.map((bus) => {
+    const busIdStr = String(bus._id);
     let totalAvailableSeats = 0;
 
-    for (let j = 0; j < bus.seats.length; j++) {
-      let seat = bus.seats[j];
-      seat.availabilityBoolean = 0;
-      if (!seat.isBookable) {
-        continue;
+    const enrichedSeats = (bus.seats || []).map((seat) => {
+      const s = { ...seat };
+      s.availabilityBoolean = 0;
+      if (!s.isBookable) return s;
+
+      const booked = availMap[`${busIdStr}_${s.seatNumber}`];
+      if (!booked) {
+        // No availability doc for this date → seat is open (or date not yet unlocked)
+        s.availabilityBoolean = 3;
+        totalAvailableSeats++;
+        return s;
       }
 
-      // all the seats are bookable. j+1 is a bookable seat
-      //find the available date for the seat
-      let dateEntryFound = false;
-      for (let k = 0; k < seat.availability.length; k++) {
-        if (seat.availability[k].date !== dayjs(date).format("YYYY-MM-DD")) {
-          continue;
-        }
-        dateEntryFound = true;
-        //this point availability date object is found. that object will be seat.availability[k]
-        let booked = seat.availability[k].booked; // this is a array of objects
-        //iterate through the booked array
-        for (let l = 0; l < booked.length; l++) {
-          //continue untill booked object.city === from
-          if (booked[l].city !== from) {
-            continue;
-          }
+      for (let l = 0; l < booked.length; l++) {
+        if (booked[l].city !== from) continue;
 
-          //when booked object.city === from
-          if (booked[l].take.out === 0) {
-            let x = l + 1;
-            let isgoneThrough = 0;
-            while (x < booked.length && booked[x].city !== to) {
-              if (booked[x].take.in == 1 || booked[x].take.out == 1) {
-                isgoneThrough = 1; //1 means taken
-                break;
-              } else if (booked[x].take.in == 2 || booked[x].take.out == 2) {
-                isgoneThrough = 2; //2 means processing
-                break;
-              }
-              x++;
+        if (booked[l].take.out === 0) {
+          // Check intermediate stops for conflicts
+          let x = l + 1;
+          let isgoneThrough = 0;
+          while (x < booked.length && booked[x].city !== to) {
+            if (booked[x].take.in == 1 || booked[x].take.out == 1) {
+              isgoneThrough = 1;
+              break;
+            } else if (booked[x].take.in == 2 || booked[x].take.out == 2) {
+              isgoneThrough = 2;
+              break;
             }
-            if (!isgoneThrough) {
-              seat.availabilityBoolean = 3;
-              totalAvailableSeats++;
-            } else if (isgoneThrough == 1) {
-              seat.availabilityBoolean = 1;
-            } else if (isgoneThrough == 2) {
-              seat.availabilityBoolean = 2;
-            }
-            break;
-          } else if (booked[l].take.out === 1) {
-            seat.availabilityBoolean = 1; //availabilityBoolean 1 means booked
-            break;
-          } else if (booked[l].take.out === 2) {
-            seat.availabilityBoolean = 2; //availabilityBoolean 2 means processing
-            break;
+            x++;
           }
+          if (!isgoneThrough) {
+            s.availabilityBoolean = 3;
+            totalAvailableSeats++;
+          } else if (isgoneThrough === 1) {
+            s.availabilityBoolean = 1;
+          } else if (isgoneThrough === 2) {
+            s.availabilityBoolean = 2;
+          }
+        } else if (booked[l].take.out === 1) {
+          s.availabilityBoolean = 1;
+        } else if (booked[l].take.out === 2) {
+          s.availabilityBoolean = 2;
         }
-        // No matching city in booked array = seat is free for this segment
-        if (seat.availabilityBoolean === 0) {
-          seat.availabilityBoolean = 3;
-          totalAvailableSeats++;
-        }
+        break;
       }
-      // No availability entry for this date at all = seat never booked = available
-      if (!dateEntryFound) {
-        seat.availabilityBoolean = 3;
+
+      // `from` city not in booked array → seat has no bookings for any segment → free
+      if (s.availabilityBoolean === 0) {
+        s.availabilityBoolean = 3;
         totalAvailableSeats++;
       }
-    }
-    bus = {
-      ...bus,
-      totalAvailableSeats,
-    };
-    arrayOfBussesAfterAvailableSeatsChecking.push(bus);
-  }
 
-  res.json(arrayOfBussesAfterAvailableSeatsChecking);
+      return s;
+    });
+
+    return { ...bus, seats: enrichedSeats, totalAvailableSeats };
+  });
+
+  res.json(result);
 });
 
 module.exports = { search };

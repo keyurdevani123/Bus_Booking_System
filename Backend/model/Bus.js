@@ -67,26 +67,6 @@ const busSchema = new mongoose.Schema({
     {
       seatNumber: Number,
       isBookable: Boolean,
-      availability: [
-        {
-          date: String, //otherwise it will be saved as Date format
-          booked: [
-            {
-              city: String,
-              take: {
-                in: {
-                  type: Number,
-                  default: 0,
-                },
-                out: {
-                  type: Number,
-                  default: 0,
-                },
-              },
-            },
-          ],
-        },
-      ],
     },
   ],
 
@@ -129,6 +109,34 @@ const busSchema = new mongoose.Schema({
     price: Number,
     description: String,
   }, */
+
+  // ── Bidirectional support ──────────────────────────────────────────────────
+  // When true, the bus runs both A→B (route[]) and B→A (returnRoute[]) on the same day.
+  isBidirectional: { type: Boolean, default: false },
+  returnRoute: [
+    {
+      city:          { type: String, required: true },
+      halts:         { type: Number, required: true },
+      arrivalTime:   { type: String, required: true },
+      departureTime: { type: String, required: true },
+    },
+  ],
+
+  // ── Denormalized city list for fast indexed search ─────────────────────────
+  // Auto-maintained by pre-save hook. Enables Bus.find({ routeCities: { $all: [from, to] } })
+  // instead of loading every bus and filtering in JS.
+  routeCities: [{ type: String }],
 });
+
+// Keep routeCities in sync whenever route[] changes
+busSchema.pre("save", function (next) {
+  if (this.isModified("route") || this.isNew) {
+    this.routeCities = this.route.map((r) => r.city);
+  }
+  next();
+});
+
+// Index for the search query: find buses covering both cities
+busSchema.index({ routeCities: 1 });
 
 module.exports = mongoose.model("Bus", busSchema);

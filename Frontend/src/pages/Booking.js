@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { bookingService, busService } from '../services/api';
+import { bookingService, busService, waitlistService } from '../services/api';
 import '../styles/Booking.css';
 
 const API_URL = process.env.REACT_APP_API_URL || (typeof window !== 'undefined' ? window.location.origin : '');
@@ -15,7 +15,17 @@ function Booking() {
   const getSaved = () => { try { return JSON.parse(sessionStorage.getItem('bookingBus') || 'null'); } catch { return null; } };
   const passed = location.state || getSaved() || {};
 
-  const [bus, setBus] = useState(passed.bus || null);
+  // Use router-state bus for instant render; background-refresh will update seat statuses.
+  // For email-link navigation (no state), also check a per-bus localStorage cache so the
+  // layout renders immediately instead of waiting for the search API.
+  const readBusCache = (id) => {
+    try {
+      const c = JSON.parse(localStorage.getItem(`busCache_${id}`) || 'null');
+      if (c && c.bus && Date.now() - c.fetchedAt < 15 * 60 * 1000) return c.bus;
+    } catch {}
+    return null;
+  };
+  const [bus, setBus] = useState(location.state?.bus || readBusCache(busId) || null);
   const [searchDate] = useState(passed.date || searchParams.get('date') || new Date().toISOString().split('T')[0]);
   const [fromCity] = useState(passed.from || searchParams.get('from') || '');
   const [toCity] = useState(passed.to || searchParams.get('to') || '');
@@ -24,18 +34,60 @@ function Booking() {
   const effectiveTo   = toCity   || (bus?.busTo?.city   || bus?.route?.[bus?.route?.length - 1]?.city || '');
 
   const [selectedSeats, setSelectedSeats] = useState([]);
-  const [formData, setFormData] = useState({ name: '', email: '', phone: '' });
+
+  // Pre-fill form with logged-in user's details
+  const userToken = (() => { try { const s = localStorage.getItem('userToken'); return s ? JSON.parse(s) : null; } catch { return null; } })();
+  const [formData, setFormData] = useState({
+    name:  userToken?.name  || '',
+    email: userToken?.email || '',
+    phone: userToken?.phone || '',
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Waitlist
+  const [seatsWanted, setSeatsWanted] = useState(1);
+  const [wlLoading, setWlLoading] = useState(false);
+  const [wlSuccess, setWlSuccess] = useState('');
+  const [wlError, setWlError] = useState('');
+
   useEffect(() => {
-    if (!bus) {
+    // Background-refresh to get the latest seat availability.
+    // Initial state is already set from location.state.bus so the layout
+    // renders instantly; this silently updates once the API responds.
+    const qFrom = searchParams.get('from') || fromCity;
+    const qTo   = searchParams.get('to')   || toCity;
+    const qDate = searchParams.get('date')  || searchDate;
+
+    if (qFrom && qTo && qDate) {
+      busService.searchBuses(qFrom, qTo, qDate, false)
+        .then((res) => {
+          const results = res.data || [];
+          const match = results.find((b) => b._id === busId || b._id?.toString() === busId);
+          if (match) {
+            setBus(match); // silently updates seat statuses
+            // Cache this bus so future email-link visits are instant
+            try { localStorage.setItem(`busCache_${busId}`, JSON.stringify({ bus: match, fetchedAt: Date.now() })); } catch {}
+          } else {
+            // Bus may be full (search returns 204) — load raw data
+            return busService.getBusById(busId).then((r) => setBus(r.data));
+          }
+        })
+        .catch(() => {
+          // Search failed — only load raw if we have no data yet
+          if (!bus) {
+            busService.getBusById(busId)
+              .then((res) => setBus(res.data))
+              .catch((err) => console.error('Failed to load bus:', err));
+          }
+        });
+    } else if (!bus) {
       busService.getBusById(busId)
         .then((res) => setBus(res.data))
         .catch((err) => console.error('Failed to load bus:', err));
     }
-  }, [bus, busId]);
+  }, [busId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getSeatStatus = (seat) => {
     if (!seat.isBookable) return 'not-bookable';
@@ -90,6 +142,11 @@ function Booking() {
       setError('Please select at least one seat.');
       return;
     }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!formData.email || !emailRegex.test(formData.email)) {
+      setError('Please enter a valid email address (e.g. name@example.com).');
+      return;
+    }
     setLoading(true);
     setError('');
     setSuccess('');
@@ -118,6 +175,7 @@ function Booking() {
         busTo: JSON.stringify(bus.busTo || {}),
         price: bus.thisBusPrice || bus.actualPrice || 0,
         busDepartureTime: bus.busFrom?.departureTime || departureTime,
+        userId: userToken?.id || '',
       };
       const res = await bookingService.createBooking(bookingData);
       const url = res.data?.url;
@@ -135,6 +193,41 @@ function Booking() {
 
   const allSeats = (bus?.seats || []).sort((a, b) => a.seatNumber - b.seatNumber);
   const isSleeper = bus?.busType?.seatType === 'Sleeper';
+
+  // Is the bus full? (all bookable seats unavailable for this route/date)
+  const busIsFull = bus && allSeats.length > 0 &&
+    allSeats.filter(s => s.isBookable).length > 0 &&
+    allSeats.filter(s => s.isBookable).every(s => getSeatStatus(s) !== 'available');
+
+  const handleWaitlist = async (e) => {
+    e.preventDefault();
+    if (!formData.name || !formData.email || !formData.phone) {
+      setWlError('Please fill in your name, email, and phone.');
+      return;
+    }
+    setWlLoading(true);
+    setWlError('');
+    try {
+      const res = await waitlistService.join({
+        busId,
+        from: effectiveFrom,
+        to: effectiveTo,
+        date: searchDate,
+        name: formData.name,
+        email: formData.email,
+        phone: Number(formData.phone),
+        userId: userToken?.id || '',
+        seatsWanted: Number(seatsWanted),
+      });
+      setWlSuccess(
+        `You're #${res.data.position} in the waitlist for ${seatsWanted} seat${seatsWanted > 1 ? 's' : ''}. We'll email you at ${formData.email} when a seat becomes available.`
+      );
+    } catch (err) {
+      setWlError(err.response?.data?.message || 'Failed to join waitlist. Please try again.');
+    } finally {
+      setWlLoading(false);
+    }
+  };
 
   // Seater: rows of 4 (2L + 2R)
   const seaterRows = [];
@@ -356,34 +449,94 @@ function Booking() {
 
         <div className="passenger-form-panel">
           <h3>Passenger Details</h3>
-          <form onSubmit={handleSubmit} className="passenger-form">
-            <div className="form-group">
-              <label>Full Name</label>
-              <input type="text" name="name" placeholder="Enter your name" value={formData.name} onChange={handleChange} required />
-            </div>
-            <div className="form-group">
-              <label>Email Address</label>
-              <input type="email" name="email" placeholder="Enter your email" value={formData.email} onChange={handleChange} required />
-            </div>
-            <div className="form-group">
-              <label>Mobile Number</label>
-              <input type="tel" name="phone" placeholder="10-digit mobile number" value={formData.phone} onChange={handleChange} required />
-            </div>
 
-            <div className="trip-summary">
-              <div className="summary-row"><span>From</span><strong>{effectiveFrom}</strong></div>
-              <div className="summary-row"><span>To</span><strong>{effectiveTo}</strong></div>
-              <div className="summary-row"><span>Date</span><strong>{searchDate}</strong></div>
-              <div className="summary-row"><span>Departure</span><strong>{bus?.searchedDepartureTime || '--'}</strong></div>
-              <div className="summary-row"><span>Arrival</span><strong>{bus?.searchedArrivalTime || '--'}</strong></div>
-              <div className="summary-row"><span>Seats</span><strong>{selectedSeats.length > 0 ? selectedSeats.join(', ') : '--'}</strong></div>
-              <div className="summary-row total-row"><span>Total Fare</span><strong>&#8377;{totalPrice}</strong></div>
-            </div>
+          {/* ── BUS FULL: show waitlist form ── */}
+          {busIsFull ? (
+            <div className="waitlist-section">
+              <div className="wl-banner">
+                <span className="wl-banner-icon">🚫</span>
+                <div>
+                  <strong>Bus is Full</strong>
+                  <p>No seats available for {effectiveFrom} → {effectiveTo} on {searchDate}.</p>
+                </div>
+              </div>
 
-            <button type="submit" className="pay-btn" disabled={loading || selectedSeats.length === 0}>
-              {loading ? 'Processing...' : 'Pay ₹' + totalPrice}
-            </button>
-          </form>
+              {wlSuccess ? (
+                <div className="wl-success">
+                  <span>✅</span>
+                  <p>{wlSuccess}</p>
+                </div>
+              ) : (
+                <form onSubmit={handleWaitlist} className="passenger-form">
+                  <p className="wl-info">Join the waitlist — we'll email you as soon as a seat is cancelled.</p>
+                  <div className="form-group">
+                    <label>Full Name</label>
+                    <input type="text" name="name" placeholder="Enter your name" value={formData.name} onChange={handleChange} required />
+                  </div>
+                  <div className="form-group">
+                    <label>Email Address</label>
+                    <input type="email" name="email" placeholder="Enter your email" value={formData.email} onChange={handleChange} required />
+                  </div>
+                  <div className="form-group">
+                    <label>Mobile Number</label>
+                    <input type="tel" name="phone" placeholder="10-digit mobile number" value={formData.phone} onChange={handleChange} required />
+                  </div>
+                  <div className="form-group">
+                    <label>How many seats do you need?</label>
+                    <div className="wl-seat-stepper">
+                      <button
+                        type="button"
+                        className="wl-step-btn"
+                        onClick={() => setSeatsWanted(v => Math.max(1, v - 1))}
+                        disabled={seatsWanted <= 1}
+                      >−</button>
+                      <span className="wl-step-val">{seatsWanted} seat{seatsWanted > 1 ? 's' : ''}</span>
+                      <button
+                        type="button"
+                        className="wl-step-btn"
+                        onClick={() => setSeatsWanted(v => Math.min(6, v + 1))}
+                        disabled={seatsWanted >= 6}
+                      >+</button>
+                    </div>
+                  </div>
+                  {wlError && <div className="error-message">{wlError}</div>}
+                  <button type="submit" className="pay-btn wl-btn" disabled={wlLoading}>
+                    {wlLoading ? 'Adding to Waitlist…' : '🔔 Join Waitlist'}
+                  </button>
+                </form>
+              )}
+            </div>
+          ) : (
+            /* ── NORMAL: booking form ── */
+            <form onSubmit={handleSubmit} className="passenger-form">
+              <div className="form-group">
+                <label>Full Name</label>
+                <input type="text" name="name" placeholder="Enter your name" value={formData.name} onChange={handleChange} required />
+              </div>
+              <div className="form-group">
+                <label>Email Address</label>
+                <input type="email" name="email" placeholder="Enter your email" value={formData.email} onChange={handleChange} required />
+              </div>
+              <div className="form-group">
+                <label>Mobile Number</label>
+                <input type="tel" name="phone" placeholder="10-digit mobile number" value={formData.phone} onChange={handleChange} required />
+              </div>
+
+              <div className="trip-summary">
+                <div className="summary-row"><span>From</span><strong>{effectiveFrom}</strong></div>
+                <div className="summary-row"><span>To</span><strong>{effectiveTo}</strong></div>
+                <div className="summary-row"><span>Date</span><strong>{searchDate}</strong></div>
+                <div className="summary-row"><span>Departure</span><strong>{bus?.searchedDepartureTime || '--'}</strong></div>
+                <div className="summary-row"><span>Arrival</span><strong>{bus?.searchedArrivalTime || '--'}</strong></div>
+                <div className="summary-row"><span>Seats</span><strong>{selectedSeats.length > 0 ? selectedSeats.join(', ') : '--'}</strong></div>
+                <div className="summary-row total-row"><span>Total Fare</span><strong>&#8377;{totalPrice}</strong></div>
+              </div>
+
+              <button type="submit" className="pay-btn" disabled={loading || selectedSeats.length === 0}>
+                {loading ? 'Processing...' : 'Pay ₹' + totalPrice}
+              </button>
+            </form>
+          )}
         </div>
       </div>
     </div>
