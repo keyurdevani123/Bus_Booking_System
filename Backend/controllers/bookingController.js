@@ -479,17 +479,6 @@ const addBooking = async (data, tempBookId) => {
   if (tempBookId) {
     const existing = await Booking.findOne({ tempBookId }).lean();
     if (existing) {
-      // Previous booking exists but email may have failed earlier; retry once.
-      if (!existing.emailSent && existing.email) {
-        sendEmailWithAttachment(existing.email, tempBookId)
-          .then(async () => {
-            await Booking.updateOne({ _id: existing._id }, { $set: { emailSent: true } });
-            console.log("Retried and sent ticket email for existing booking:", tempBookId);
-          })
-          .catch((err) => {
-            console.error("Retry ticket email failed for existing booking:", tempBookId, err);
-          });
-      }
       return existing;
     }
   }
@@ -618,17 +607,6 @@ const confirmBooking = asyncHandler(async (req, res) => {
             { _id: alreadyBooked._id },
             { $set: { userId: bookingOwner.userId } }
           );
-        }
-        // If booking exists but email wasn't sent, retry in background.
-        if (!alreadyBooked.emailSent && alreadyBooked.email) {
-          sendEmailWithAttachment(alreadyBooked.email, tempBookId)
-            .then(async () => {
-              await Booking.updateOne({ _id: alreadyBooked._id }, { $set: { emailSent: true } });
-              console.log("confirmBooking retry email success:", tempBookId);
-            })
-            .catch((err) => {
-              console.error("confirmBooking retry email failed:", tempBookId, err);
-            });
         }
         return res.json({ ok: true, message: "Already confirmed" });
       }

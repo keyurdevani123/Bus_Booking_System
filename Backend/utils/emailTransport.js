@@ -63,12 +63,6 @@ const normalizeRecipients = (value) => {
   return [value];
 };
 
-const resolveRecipients = (originalTo) => {
-  const overrideRecipient = String(process.env.MAIL_OVERRIDE_TO || "").trim();
-  const recipients = normalizeRecipients(overrideRecipient || originalTo).filter(Boolean);
-  return recipients.length > 0 ? recipients : [];
-};
-
 const normalizeAttachment = (attachment) => {
   if (!attachment) return null;
   if (attachment.content && attachment.filename) {
@@ -104,7 +98,7 @@ const isUnsafeResendSender = (value = "") => {
 const buildResendPayload = (mailOptions, from) => {
   const payload = {
     from,
-    to: resolveRecipients(mailOptions.to),
+    to: normalizeRecipients(mailOptions.to).filter(Boolean),
     subject: mailOptions.subject,
     html: mailOptions.html,
   };
@@ -163,7 +157,7 @@ const sendWithResend = async (mailOptions) => {
 const sendMail = async (mailOptions, transportOptions = { secure: false, port: 587 }) => {
   const outboundMailOptions = {
     ...mailOptions,
-    to: resolveRecipients(mailOptions.to),
+    to: normalizeRecipients(mailOptions.to).filter(Boolean),
   };
 
   if (process.env.RESEND_API_KEY) {

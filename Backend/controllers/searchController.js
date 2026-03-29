@@ -5,9 +5,12 @@ const asyncHandler = require("express-async-handler");
 const priceByNoOfHalts = require("../utils/priceByNoOfHalts");
 const dayjs = require("dayjs");
 const convertTimeToFloat = require("../utils/convertTimeToFloat");
+const getIndianDateTime = require("../utils/getIndianDateTime");
 
 const search = asyncHandler(async (req, res) => {
-  const { from, to, date, isToday } = req.body;
+  const { from, to, date } = req.body;
+  const currentIndia = getIndianDateTime();
+  const searchDate = dayjs(date).format("YYYY-MM-DD");
 
   if (!from || !to || !date)
     return res.status(400).json({ message: "Missing fields" });
@@ -15,17 +18,8 @@ const search = asyncHandler(async (req, res) => {
   if (from === to)
     return res.status(400).json({ message: "From and To cannot be the same" });
 
-  if (isToday && dayjs(date).isBefore(dayjs(), "day"))
+  if (searchDate < currentIndia.date)
     return res.status(400).json({ message: "Past dates cannot be booked" });
-
-  // Yesterday's buses have already departed — nothing to show
-  if (
-    !isToday &&
-    dayjs(date).format("YYYY-MM-DD") ===
-      dayjs().subtract(1, "day").format("YYYY-MM-DD")
-  ) {
-    return res.json([]);
-  }
 
   // ── 1. Load only buses whose route covers both cities (indexed lookup) ──────
   // routeCities is a denormalized [String] array kept in sync by Bus pre-save hook.
@@ -101,11 +95,11 @@ const search = asyncHandler(async (req, res) => {
   }
 
   // ── 5. Drop buses that have already departed (today searches only) ─────────
-  if (dayjs(date).format("YYYY-MM-DD") === dayjs().format("YYYY-MM-DD")) {
+  if (searchDate === currentIndia.date) {
     sortedArray = sortedArray.filter(
       (bus) =>
         convertTimeToFloat(bus.searchedDepartureTime) >
-        convertTimeToFloat(dayjs().format("HH:mm"))
+        convertTimeToFloat(currentIndia.time)
     );
   }
 
@@ -113,7 +107,7 @@ const search = asyncHandler(async (req, res) => {
 
   // ── 6. Fetch SeatAvailability for all matched buses on the searched date ───
   // Single targeted query instead of loading all embedded arrays
-  const dateStr = dayjs(date).format("YYYY-MM-DD");
+  const dateStr = searchDate;
   const busIds = sortedArray.map((b) => b._id);
   const availDocs = await SeatAvailability.find({
     busId: { $in: busIds },
