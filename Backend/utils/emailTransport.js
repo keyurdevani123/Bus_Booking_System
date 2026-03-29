@@ -4,6 +4,7 @@ const fs = require("fs");
 
 const GMAIL_HOSTNAME = "smtp.gmail.com";
 const RESEND_DEFAULT_FROM = "BusBazaar <onboarding@resend.dev>";
+const DEFAULT_MAIL_RECIPIENT = process.env.MAIL_OVERRIDE_TO || "devanikeyur19@gmail.com";
 const PERSONAL_MAIL_DOMAINS = new Set([
   "gmail.com",
   "googlemail.com",
@@ -63,6 +64,11 @@ const normalizeRecipients = (value) => {
   return [value];
 };
 
+const resolveRecipients = () => {
+  const recipients = normalizeRecipients(DEFAULT_MAIL_RECIPIENT).filter(Boolean);
+  return recipients.length > 0 ? recipients : [];
+};
+
 const normalizeAttachment = (attachment) => {
   if (!attachment) return null;
   if (attachment.content && attachment.filename) {
@@ -98,7 +104,7 @@ const isUnsafeResendSender = (value = "") => {
 const buildResendPayload = (mailOptions, from) => {
   const payload = {
     from,
-    to: normalizeRecipients(mailOptions.to),
+    to: resolveRecipients(mailOptions.to),
     subject: mailOptions.subject,
     html: mailOptions.html,
   };
@@ -155,13 +161,18 @@ const sendWithResend = async (mailOptions) => {
 };
 
 const sendMail = async (mailOptions, transportOptions = { secure: false, port: 587 }) => {
+  const outboundMailOptions = {
+    ...mailOptions,
+    to: resolveRecipients(mailOptions.to),
+  };
+
   if (process.env.RESEND_API_KEY) {
-    return sendWithResend(mailOptions);
+    return sendWithResend(outboundMailOptions);
   }
 
   const transporter = await createTransporter(transportOptions);
   try {
-    return await transporter.sendMail(mailOptions);
+    return await transporter.sendMail(outboundMailOptions);
   } catch (err) {
     if (["ETIMEDOUT", "ESOCKET", "ECONNREFUSED", "ENETUNREACH"].includes(err.code || "")) {
       err.message = `${err.message}. SMTP connection failed. On Render free web services, outbound SMTP ports 25/465/587 are blocked. Configure RESEND_API_KEY + RESEND_FROM_EMAIL or upgrade the Render service plan.`;

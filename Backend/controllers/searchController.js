@@ -101,13 +101,10 @@ const search = asyncHandler(async (req, res) => {
   }
 
   // ── 5. Drop buses that have already departed (today searches only) ─────────
-  if (
-    dayjs(date).format("YYYY-MM-DD") === dayjs().format("YYYY-MM-DD") &&
-    isToday
-  ) {
+  if (dayjs(date).format("YYYY-MM-DD") === dayjs().format("YYYY-MM-DD")) {
     sortedArray = sortedArray.filter(
       (bus) =>
-        convertTimeToFloat(bus.searchedDepartureTime) >=
+        convertTimeToFloat(bus.searchedDepartureTime) >
         convertTimeToFloat(dayjs().format("HH:mm"))
     );
   }

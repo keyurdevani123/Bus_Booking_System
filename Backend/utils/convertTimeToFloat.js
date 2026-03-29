@@ -1,6 +1,14 @@
 function convertTimeToFloat(timeString) {
-  const floatTimeString = timeString.replace(":", ".");
-  return parseFloat(floatTimeString);
+  if (!timeString || typeof timeString !== "string") return 0;
+  const [hoursPart = "0", minutesPart = "0"] = timeString.split(":");
+  const hours = Number(hoursPart);
+  const minutes = Number(minutesPart);
+
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return 0;
+  }
+
+  return hours + minutes / 60;
 }
 
 module.exports = convertTimeToFloat;
