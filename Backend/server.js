@@ -61,6 +61,10 @@ app.use("/webhook", rawBodyMiddleware, require("./routes/webhook"));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
+app.get("/health", (req, res) => {
+  res.status(200).json({ ok: true, service: "backend", uptime: process.uptime() });
+});
+
 // Serve React frontend build if it exists (run `npm run build` in Frontend/ first)
 const frontendBuildPath = path.join(__dirname, "..", "Frontend", "build");
 if (require("fs").existsSync(frontendBuildPath)) {
