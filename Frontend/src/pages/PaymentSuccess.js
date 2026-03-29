@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { bookingService } from '../services/api';
 import '../styles/PaymentSuccess.css';
@@ -7,6 +7,8 @@ function PaymentSuccess() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const confirmed = useRef(false); // prevent double-call on StrictMode re-renders
+  const [confirmState, setConfirmState] = useState('confirming'); // confirming | confirmed | failed
+  const [confirmMessage, setConfirmMessage] = useState('Confirming your booking...');
 
   const from       = params.get('from')        || '—';
   const to         = params.get('to')          || '—';
@@ -22,11 +24,25 @@ function PaymentSuccess() {
 
   // Confirm booking on the backend (fallback for when Stripe webhook can't reach localhost)
   useEffect(() => {
-    if (!tempBookId || confirmed.current) return;
+    if (!tempBookId) {
+      setConfirmState('failed');
+      setConfirmMessage('Missing booking reference. Please contact support with payment details.');
+      return;
+    }
+    if (confirmed.current) return;
     confirmed.current = true;
+    setConfirmState('confirming');
     bookingService.confirmBooking(tempBookId)
-      .then(() => console.log('Booking confirmed via success page'))
-      .catch((err) => console.error('Confirm booking error:', err));
+      .then(() => {
+        setConfirmState('confirmed');
+        setConfirmMessage('Your booking is confirmed.');
+        console.log('Booking confirmed via success page');
+      })
+      .catch((err) => {
+        console.error('Confirm booking error:', err);
+        setConfirmState('failed');
+        setConfirmMessage(err.response?.data?.message || 'Payment received, but booking confirmation failed. Please contact support.');
+      });
   }, [tempBookId]);
 
   const seatList = seats.split(',').join(', ');
@@ -49,7 +65,9 @@ function PaymentSuccess() {
 
         <h1 className="ps-title">Payment Successful!</h1>
         <p className="ps-subtitle">
-          Your booking is <strong>confirmed</strong>. A ticket PDF has been sent to <strong>{email}</strong>.
+          {confirmState === 'confirming' && <>We received your payment. <strong>{confirmMessage}</strong></>}
+          {confirmState === 'confirmed' && <>Your booking is <strong>confirmed</strong>. A ticket PDF has been sent to <strong>{email}</strong>.</>}
+          {confirmState === 'failed' && <><strong>{confirmMessage}</strong></>}
         </p>
 
         {/* Ticket strip */}
@@ -109,9 +127,17 @@ function PaymentSuccess() {
           </div>
         </div>
 
-        <p className="ps-email-note">
-          📧 Check your inbox at <strong>{email}</strong> for the ticket PDF with QR code.
-        </p>
+        {confirmState === 'confirmed' && (
+          <p className="ps-email-note">
+            📧 Check your inbox at <strong>{email}</strong> for the ticket PDF with QR code.
+          </p>
+        )}
+
+        {confirmState === 'failed' && (
+          <p className="ps-email-note">
+            ⚠️ Ticket email was not sent because booking confirmation did not complete.
+          </p>
+        )}
 
         <button className="ps-home-btn" onClick={() => navigate('/')}>
           ← Back to Homepage

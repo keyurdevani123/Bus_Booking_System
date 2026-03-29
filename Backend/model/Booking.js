@@ -58,6 +58,10 @@ const bookingSchema = new mongoose.Schema({
     type: String,
     default: "",
   },
+  tempBookId: {
+    type: String,
+    default: "",
+  },
   // 'forward' = normal direction, 'return' = return trip (bidirectional bus)
   direction: {
     type: String,
@@ -70,5 +74,6 @@ const bookingSchema = new mongoose.Schema({
 bookingSchema.index({ email: 1, date: -1 });
 bookingSchema.index({ userId: 1, date: -1 });
 bookingSchema.index({ phone: 1,  date: -1 });
+bookingSchema.index({ tempBookId: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model("Booking", bookingSchema);

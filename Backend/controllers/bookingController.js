@@ -356,6 +356,14 @@ const makePayment = asyncHandler(async (req, res) => {
 });
 
 const addBooking = async (data, tempBookId) => {
+  // Idempotency: if this payment session was already confirmed, do nothing.
+  if (tempBookId) {
+    const existing = await Booking.findOne({ tempBookId }).lean();
+    if (existing) {
+      return existing;
+    }
+  }
+
   const {
     id,
     email,
@@ -427,6 +435,7 @@ const addBooking = async (data, tempBookId) => {
     arrivalTime,
     arrivalDate,
     userId: userId || "",
+    tempBookId: tempBookId || "",
   });
   await booking.save();
   try { await PendingPayment.deleteOne({ tempBookId }); } catch (_) {}
@@ -474,8 +483,15 @@ const confirmBooking = asyncHandler(async (req, res) => {
       // Restore to memory for processing
       paymentStore[tempBookId] = data;
     } else {
-      // Not in memory or DB — either already confirmed or expired
-      return res.json({ ok: true, message: "Already confirmed" });
+      // Not in memory or pending DB: check if it was already persisted as booking.
+      const alreadyBooked = await Booking.findOne({ tempBookId }).lean();
+      if (alreadyBooked) {
+        return res.json({ ok: true, message: "Already confirmed" });
+      }
+      return res.status(404).json({
+        ok: false,
+        message: "Booking confirmation not found. Payment may be incomplete or expired.",
+      });
     }
   }
 
