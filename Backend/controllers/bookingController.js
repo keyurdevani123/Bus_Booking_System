@@ -656,21 +656,34 @@ const getUserBookingHistory = asyncHandler(async (req, res) => {
   const { email, userId, phone } = req.query;
   if (!email && !userId && !phone) return res.status(400).json({ message: "At least email, userId, or phone is required" });
 
-  // Build query: match by email (case-insensitive) OR userId OR phone
-  const query = [];
+  // Prefer stable account identity first.
+  // Only fall back to phone if neither userId nor email is available.
+  const orQuery = [];
   if (email) {
     const safe = escapeRegex(String(email).trim());
-    query.push({ email: { $regex: new RegExp(`^${safe}$`, "i") } });
+    orQuery.push({ email: { $regex: new RegExp(`^${safe}$`, "i") } });
   }
-  if (userId) query.push({ userId: String(userId).trim() });
-  if (phone) {
+  if (userId) orQuery.push({ userId: String(userId).trim() });
+
+  let finalQuery = null;
+  if (orQuery.length > 1) {
+    finalQuery = { $or: orQuery };
+  } else if (orQuery.length === 1) {
+    finalQuery = orQuery[0];
+  } else if (phone) {
     const parsedPhone = Number(String(phone).replace(/\D/g, ""));
-    if (!Number.isNaN(parsedPhone)) query.push({ phone: parsedPhone });
+    if (!Number.isNaN(parsedPhone)) {
+      finalQuery = { phone: parsedPhone };
+    }
   }
 
-  console.log("[history] querying with:", JSON.stringify(query));
+  if (!finalQuery) {
+    return res.status(400).json({ message: "No valid booking history lookup values were provided" });
+  }
 
-  const bookings = await Booking.find(query.length > 1 ? { $or: query } : query[0])
+  console.log("[history] querying with:", JSON.stringify(finalQuery));
+
+  const bookings = await Booking.find(finalQuery)
     .select("_id busId id email date seats from to departureTime arrivalTime arrivalDate isChecked mappedDate randomNumber userId")
     .lean()
     .sort({ date: -1 });
