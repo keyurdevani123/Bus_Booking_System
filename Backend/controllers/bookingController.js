@@ -49,6 +49,33 @@ const resolveAvailDate = (date, busDepartureTime, departureTime) => {
   return dayjs(date).subtract(1, "day").format("YYYY-MM-DD");
 };
 
+const normalizePublicBaseUrl = (rawValue, fallbackValue) => {
+  const candidates = [rawValue, fallbackValue].filter(Boolean);
+
+  for (const candidate of candidates) {
+    let value = String(candidate).trim();
+    if (!value) continue;
+
+    if (!/^https?:\/\//i.test(value)) {
+      // Localhost should stay HTTP; public domains default to HTTPS.
+      if (/^(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/i.test(value)) {
+        value = `http://${value}`;
+      } else {
+        value = `https://${value}`;
+      }
+    }
+
+    try {
+      const u = new URL(value);
+      return `${u.protocol}//${u.host}`;
+    } catch (_) {
+      // Try next candidate.
+    }
+  }
+
+  return null;
+};
+
 const generateRandomStringAndStoreDetails = async (data) => {
   const id = crypto.randomBytes(16).toString("hex");
   const currentDateFromLibrary = dayjs().format("YYYY-MM-DD");
@@ -247,15 +274,36 @@ const makePayment = asyncHandler(async (req, res) => {
   }
   const totalPrice = perSeatPrice * seatCount;
 
+  const requestBase = `${req.protocol}://${req.get("host")}`;
+
   // Frontend root is where Stripe should redirect user after payment.
-  const frontendRoot = process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`;
+  const frontendRoot = normalizePublicBaseUrl(process.env.FRONTEND_URL, requestBase);
+  if (!frontendRoot) {
+    return res.status(500).json({ message: "Invalid FRONTEND_URL configuration" });
+  }
+
   // Backend root must be used for image URLs (bus images are served by backend route).
-  const backendRoot = process.env.BACKEND_URL || `${req.protocol}://${req.get("host")}`;
+  const backendRoot = normalizePublicBaseUrl(process.env.BACKEND_URL, requestBase);
   const rawBusImageURL = bus.imagesURLs && bus.imagesURLs.length > 0
-    ? `${backendRoot}/bus/busses/${bus.imagesURLs[0]}`
+    ? new URL(`/bus/busses/${bus.imagesURLs[0]}`, backendRoot).toString()
     : null;
   // Stripe only accepts public HTTPS image URLs for checkout products.
   const busImageURL = rawBusImageURL && /^https:\/\//.test(rawBusImageURL) ? rawBusImageURL : null;
+
+  const successUrl = new URL("/payment-success", frontendRoot);
+  successUrl.searchParams.set("from", from);
+  successUrl.searchParams.set("to", to);
+  successUrl.searchParams.set("date", date);
+  successUrl.searchParams.set("departure", departureTime);
+  successUrl.searchParams.set("arrival", arrivalTime);
+  successUrl.searchParams.set("seats", seats);
+  successUrl.searchParams.set("price", String(totalPrice));
+  successUrl.searchParams.set("bus", numberPlate);
+  successUrl.searchParams.set("name", busName);
+  successUrl.searchParams.set("email", email);
+  successUrl.searchParams.set("tempBookId", tempBookId);
+
+  const cancelUrl = new URL("/", frontendRoot).toString();
 
   let session;
   try {
@@ -280,11 +328,9 @@ const makePayment = asyncHandler(async (req, res) => {
     mode: "payment",
     customer_email: email,
     billing_address_collection: "required",
-    success_url:
-      frontendRoot +
-      `/payment-success?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}&departure=${encodeURIComponent(departureTime)}&arrival=${encodeURIComponent(arrivalTime)}&seats=${encodeURIComponent(seats)}&price=${encodeURIComponent(totalPrice)}&bus=${encodeURIComponent(numberPlate)}&name=${encodeURIComponent(busName)}&email=${encodeURIComponent(email)}&tempBookId=${encodeURIComponent(tempBookId)}`,
+    success_url: successUrl.toString(),
     // tempBookId also passed in URL so frontend can confirm booking without needing webhook
-    cancel_url: frontendRoot + "/",
+    cancel_url: cancelUrl,
     metadata: {
       tempBookId: tempBookId,
     },
