@@ -49,7 +49,11 @@ function BookingHistory() {
       }
     } catch {}
 
-    bookingService.getUserBookingHistory(userToken.email, userToken.id, userToken.phone)
+    const tokenEmail = userToken?.email || '';
+    const tokenUserId = userToken?.id || userToken?._id || userToken?.userId || '';
+    const tokenPhone = userToken?.phone || '';
+
+    bookingService.getUserBookingHistory(tokenEmail, tokenUserId, tokenPhone)
       .then((res) => {
         const data = res.data || [];
         setBookings(data);

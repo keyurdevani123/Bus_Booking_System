@@ -49,6 +49,8 @@ const resolveAvailDate = (date, busDepartureTime, departureTime) => {
   return dayjs(date).subtract(1, "day").format("YYYY-MM-DD");
 };
 
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const normalizePublicBaseUrl = (rawValue, fallbackValue) => {
   const candidates = [rawValue, fallbackValue].filter(Boolean);
 
@@ -538,9 +540,15 @@ const getUserBookingHistory = asyncHandler(async (req, res) => {
 
   // Build query: match by email (case-insensitive) OR userId OR phone
   const query = [];
-  if (email)  query.push({ email: { $regex: new RegExp(`^${email.trim()}$`, "i") } });
-  if (userId) query.push({ userId });
-  if (phone)  query.push({ phone: Number(phone) });
+  if (email) {
+    const safe = escapeRegex(String(email).trim());
+    query.push({ email: { $regex: new RegExp(`^${safe}$`, "i") } });
+  }
+  if (userId) query.push({ userId: String(userId).trim() });
+  if (phone) {
+    const parsedPhone = Number(String(phone).replace(/\D/g, ""));
+    if (!Number.isNaN(parsedPhone)) query.push({ phone: parsedPhone });
+  }
 
   console.log("[history] querying with:", JSON.stringify(query));
 

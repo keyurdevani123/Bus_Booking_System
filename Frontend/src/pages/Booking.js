@@ -153,12 +153,16 @@ function Booking() {
     try {
       if (!bus) throw new Error('Bus data not loaded.');
       if (!effectiveFrom || !effectiveTo) throw new Error('Route information missing. Go back and search again.');
+      const accountEmail = userToken?.email || formData.email;
+      const accountPhone = userToken?.phone || formData.phone;
+      const accountName = userToken?.name || formData.name;
+      const accountUserId = userToken?.id || userToken?._id || userToken?.userId || '';
       const departureTime = bus.searchedDepartureTime || bus.busFrom?.departureTime;
       const arrivalTime = bus.searchedArrivalTime || bus.busTo?.arrivalTime;
       const bookingData = {
-        id: formData.name || 'guest',
-        email: formData.email,
-        phone: Number(formData.phone),
+        id: accountName || 'guest',
+        email: accountEmail,
+        phone: Number(accountPhone),
         date: searchDate,
         seats: selectedSeats.join(','),
         busId,
@@ -175,7 +179,7 @@ function Booking() {
         busTo: JSON.stringify(bus.busTo || {}),
         price: bus.thisBusPrice || bus.actualPrice || 0,
         busDepartureTime: bus.busFrom?.departureTime || departureTime,
-        userId: userToken?.id || '',
+        userId: accountUserId,
       };
       const res = await bookingService.createBooking(bookingData);
       const url = res.data?.url;
