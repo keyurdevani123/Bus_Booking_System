@@ -1,19 +1,13 @@
 const asyncHandler = require("express-async-handler");
 const crypto = require("crypto");
 const bcrypt = require("bcrypt");
-const nodemailer = require("nodemailer");
 const User = require("../model/User");
 const Admin = require("../model/Admin");
+const { createTransporter } = require("../utils/emailTransport");
 
 // ─── Email helper ────────────────────────────────────────────────────────────
 const sendResetEmail = async (toEmail, resetURL) => {
-  const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-    tls: { rejectUnauthorized: false },
-  });
+  const transporter = await createTransporter({ secure: true, port: 465 });
 
   await transporter.sendMail({
     from: `"E-Ticket" <${process.env.EMAIL_USER}>`,
