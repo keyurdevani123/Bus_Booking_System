@@ -163,4 +163,4 @@ mongoose.connection.once("open", () => {
   });
 });
 
-console.log("ENV loaded:", process.env.DATABASE_URI);
+console.log("Environment variables loaded");

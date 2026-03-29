@@ -11,7 +11,15 @@ const corsOptions = {
       .map((o) => o.trim())
       .filter(Boolean);
 
-    const allowlist = [...new Set([...allowedOrigins, ...envOrigins])];
+    const localDevOrigins = ["http://localhost:3000", "http://127.0.0.1:3000"];
+
+    const allowlist = [...new Set([...allowedOrigins, ...envOrigins, ...localDevOrigins])];
+
+    // Allow any Vercel preview/production domain for this frontend repo pattern.
+    // If you want stricter security, keep only explicit origins in CORS_ORIGINS.
+    if (/^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(origin)) {
+      return callback(null, true);
+    }
 
     if (allowlist.includes(origin)) {
       return callback(null, true);
