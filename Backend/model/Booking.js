@@ -62,6 +62,10 @@ const bookingSchema = new mongoose.Schema({
     type: String,
     default: "",
   },
+  emailSent: {
+    type: Boolean,
+    default: false,
+  },
   // 'forward' = normal direction, 'return' = return trip (bidirectional bus)
   direction: {
     type: String,

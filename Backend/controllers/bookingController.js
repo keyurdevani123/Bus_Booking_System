@@ -360,6 +360,17 @@ const addBooking = async (data, tempBookId) => {
   if (tempBookId) {
     const existing = await Booking.findOne({ tempBookId }).lean();
     if (existing) {
+      // Previous booking exists but email may have failed earlier; retry once.
+      if (!existing.emailSent && existing.email) {
+        sendEmailWithAttachment(existing.email, tempBookId)
+          .then(async () => {
+            await Booking.updateOne({ _id: existing._id }, { $set: { emailSent: true } });
+            console.log("Retried and sent ticket email for existing booking:", tempBookId);
+          })
+          .catch((err) => {
+            console.error("Retry ticket email failed for existing booking:", tempBookId, err);
+          });
+      }
       return existing;
     }
   }
@@ -436,6 +447,7 @@ const addBooking = async (data, tempBookId) => {
     arrivalDate,
     userId: userId || "",
     tempBookId: tempBookId || "",
+    emailSent: false,
   });
   await booking.save();
   try { await PendingPayment.deleteOne({ tempBookId }); } catch (_) {}
@@ -462,6 +474,9 @@ const addBooking = async (data, tempBookId) => {
       return sendEmailWithAttachment(email, tempBookId);
     })
     .then(() => {
+      return Booking.updateOne({ _id: booking._id }, { $set: { emailSent: true } });
+    })
+    .then(() => {
       console.log("Email sent successfully for", tempBookId);
     })
     .catch((err) => {
@@ -486,6 +501,17 @@ const confirmBooking = asyncHandler(async (req, res) => {
       // Not in memory or pending DB: check if it was already persisted as booking.
       const alreadyBooked = await Booking.findOne({ tempBookId }).lean();
       if (alreadyBooked) {
+        // If booking exists but email wasn't sent, retry in background.
+        if (!alreadyBooked.emailSent && alreadyBooked.email) {
+          sendEmailWithAttachment(alreadyBooked.email, tempBookId)
+            .then(async () => {
+              await Booking.updateOne({ _id: alreadyBooked._id }, { $set: { emailSent: true } });
+              console.log("confirmBooking retry email success:", tempBookId);
+            })
+            .catch((err) => {
+              console.error("confirmBooking retry email failed:", tempBookId, err);
+            });
+        }
         return res.json({ ok: true, message: "Already confirmed" });
       }
       return res.status(404).json({
