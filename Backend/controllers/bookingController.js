@@ -78,6 +78,44 @@ const normalizePublicBaseUrl = (rawValue, fallbackValue) => {
   return null;
 };
 
+const validatePaidCheckoutSession = async (tempBookId, sessionId) => {
+  if (!sessionId) {
+    const error = new Error("Missing Stripe session reference");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  let session;
+  try {
+    session = await stripe.checkout.sessions.retrieve(sessionId);
+  } catch (err) {
+    const error = new Error("Unable to verify Stripe checkout session");
+    error.statusCode = 400;
+    error.cause = err;
+    throw error;
+  }
+
+  if (!session) {
+    const error = new Error("Stripe checkout session not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (session.metadata?.tempBookId !== tempBookId) {
+    const error = new Error("Stripe session does not match this booking reference");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (session.payment_status !== "paid") {
+    const error = new Error("Payment is not completed yet");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  return session;
+};
+
 const generateRandomStringAndStoreDetails = async (data) => {
   const id = crypto.randomBytes(16).toString("hex");
   const currentDateFromLibrary = dayjs().format("YYYY-MM-DD");
@@ -96,6 +134,55 @@ const generateRandomStringAndStoreDetails = async (data) => {
     console.error("Failed to persist pending payment to DB:", e);
   }
   return temp;
+};
+
+const sendTicketEmailForBooking = async ({
+  bookingId,
+  id,
+  phone,
+  randomNumber,
+  email,
+  from,
+  to,
+  departureTime,
+  arrivalTime,
+  arrivalDate,
+  date,
+  numberPlate,
+  routeNumber,
+  price,
+  seats,
+  tempBookId,
+}) => {
+  try {
+    await generateQRCodeAndPDF(
+      id,
+      phone,
+      randomNumber,
+      email,
+      from,
+      to,
+      departureTime,
+      arrivalTime,
+      arrivalDate,
+      date,
+      numberPlate,
+      routeNumber,
+      price,
+      seats,
+      tempBookId
+    );
+  } catch (err) {
+    console.error("Ticket PDF generation failed. Sending confirmation email without attachment.", err);
+  }
+
+  try {
+    await sendEmailWithAttachment(email, tempBookId);
+    await Booking.updateOne({ _id: bookingId }, { $set: { emailSent: true } });
+    console.log("Email sent successfully for", tempBookId);
+  } catch (err) {
+    console.error("Ticket email failed:", err);
+  }
 };
 
 const makePayment = asyncHandler(async (req, res) => {
@@ -304,6 +391,7 @@ const makePayment = asyncHandler(async (req, res) => {
   successUrl.searchParams.set("name", busName);
   successUrl.searchParams.set("email", email);
   successUrl.searchParams.set("tempBookId", tempBookId);
+  successUrl.searchParams.set("session_id", "{CHECKOUT_SESSION_ID}");
 
   const cancelUrl = new URL("/", frontendRoot).toString();
 
@@ -447,7 +535,7 @@ const addBooking = async (data, tempBookId) => {
     departureTime,
     arrivalTime,
     arrivalDate,
-    userId: userId || "",
+    userId: userId ? String(userId) : "",
     tempBookId: tempBookId || "",
     emailSent: false,
   });
@@ -455,7 +543,8 @@ const addBooking = async (data, tempBookId) => {
   try { await PendingPayment.deleteOne({ tempBookId }); } catch (_) {}
 
   // ── PDF + email (fire-and-forget — failure never blocks booking) ──────────
-  generateQRCodeAndPDF(
+  sendTicketEmailForBooking({
+    bookingId: booking._id,
     id,
     phone,
     randomNumber,
@@ -468,26 +557,17 @@ const addBooking = async (data, tempBookId) => {
     date,
     numberPlate,
     routeNumber,
-    pdfTotalPrice,
+    price: pdfTotalPrice,
     seats,
-    tempBookId
-  )
-    .then(() => {
-      return sendEmailWithAttachment(email, tempBookId);
-    })
-    .then(() => {
-      return Booking.updateOne({ _id: booking._id }, { $set: { emailSent: true } });
-    })
-    .then(() => {
-      console.log("Email sent successfully for", tempBookId);
-    })
-    .catch((err) => {
-      console.error("PDF/email failed (booking already saved):", err);
-    });
+    tempBookId,
+  });
+
+  return booking;
 };
 
 const confirmBooking = asyncHandler(async (req, res) => {
   const { tempBookId } = req.params;
+  const sessionId = req.query.session_id || req.body?.sessionId || "";
   if (!tempBookId) return res.status(400).json({ message: "Missing tempBookId" });
 
   let data = paymentStore[tempBookId];
@@ -524,13 +604,14 @@ const confirmBooking = asyncHandler(async (req, res) => {
   }
 
   try {
+    await validatePaidCheckoutSession(tempBookId, sessionId);
     await addBooking(data, tempBookId);
     delete paymentStore[tempBookId];
     console.log("Booking confirmed via success-page fallback:", tempBookId);
     res.json({ ok: true });
   } catch (err) {
     console.error("confirmBooking error:", err);
-    res.status(500).json({ message: "Failed to confirm booking" });
+    res.status(err.statusCode || 500).json({ message: err.message || "Failed to confirm booking" });
   }
 });
 

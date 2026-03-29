@@ -1,7 +1,26 @@
 import axios from 'axios';
 
-// When served from the same server (any IP/domain), use the current origin automatically
-const API_URL = process.env.REACT_APP_API_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3200');
+const trimTrailingSlash = (value) => value.replace(/\/+$/, '');
+
+const resolveApiUrl = () => {
+  const configuredUrl = (process.env.REACT_APP_API_URL || '').trim();
+  if (configuredUrl) {
+    return trimTrailingSlash(configuredUrl);
+  }
+
+  if (typeof window === 'undefined') {
+    return 'http://localhost:3200';
+  }
+
+  const { origin, hostname, port } = window.location;
+  if ((hostname === 'localhost' || hostname === '127.0.0.1') && port === '3000') {
+    return 'http://localhost:3200';
+  }
+
+  return trimTrailingSlash(origin);
+};
+
+const API_URL = resolveApiUrl();
 
 const api = axios.create({
   baseURL: API_URL,
@@ -54,8 +73,12 @@ export const busService = {
 
 // Booking Services
 export const bookingService = {
-  confirmBooking: (tempBookId) =>
-    api.post(`/booking/confirm/${tempBookId}`),
+  confirmBooking: (tempBookId, sessionId) => {
+    const params = new URLSearchParams();
+    if (sessionId) params.append('session_id', sessionId);
+    const query = params.toString();
+    return api.post(`/booking/confirm/${tempBookId}${query ? `?${query}` : ''}`);
+  },
   getUserBookingHistory: (email, userId, phone) => {
     const params = new URLSearchParams();
     if (email)  params.append('email',  email);
