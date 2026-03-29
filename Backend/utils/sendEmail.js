@@ -1,11 +1,10 @@
 const nodemailer = require("nodemailer");
 const path = require("path");
 const os   = require("os");
+const fs = require("fs");
 
-function sendEmailWithAttachment(email, tempBookId) {
-  const pdfPath = path.join(os.tmpdir(), `${tempBookId}.pdf`);
-
-  const transporter = nodemailer.createTransport({
+function createTransporter() {
+  return nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 587,
     secure: false,
@@ -17,6 +16,16 @@ function sendEmailWithAttachment(email, tempBookId) {
       rejectUnauthorized: false,
     },
   });
+}
+
+function sendEmailWithAttachment(email, tempBookId) {
+  const pdfPath = path.join(os.tmpdir(), `${tempBookId}.pdf`);
+
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    return Promise.reject(new Error("EMAIL_USER or EMAIL_PASS is missing"));
+  }
+
+  const transporter = createTransporter();
 
   const mailOptions = {
     from: `"BusBazaar" <${process.env.EMAIL_USER}>`,
@@ -44,22 +53,29 @@ function sendEmailWithAttachment(email, tempBookId) {
     ],
   };
 
+  const hasAttachment = fs.existsSync(pdfPath);
+
+  // Fallback: if attachment is missing, still send confirmation email text.
+  if (!hasAttachment) {
+    const fallbackOptions = {
+      ...mailOptions,
+      attachments: [],
+      html: `${mailOptions.html}<p style="color:#b45309;font-size:12px;">Note: Ticket attachment could not be generated automatically. Please contact support with booking reference.</p>`,
+    };
+    return transporter.sendMail(fallbackOptions).then((info) => {
+      console.log("Email sent without attachment to", email, ":", info.response);
+    });
+  }
+
   return transporter.sendMail(mailOptions).then((info) => {
     console.log("Email sent to", email, ":", info.response);
+    // Best-effort cleanup for ephemeral temp storage.
+    fs.unlink(pdfPath, () => {});
   });
 }
 
 function sendCancellationEmail(email, booking) {
-  const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-    tls: { rejectUnauthorized: false },
-  });
+  const transporter = createTransporter();
 
   const mailOptions = {
     from: `"BusBazaar" <${process.env.EMAIL_USER}>`,
@@ -108,16 +124,7 @@ function sendWaitlistNotificationEmail(email, name, details) {
   const { from, to, date, bookingLink, seatsNotified, seatsWanted } = details;
   const remaining = seatsWanted - seatsNotified;
 
-  const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-    tls: { rejectUnauthorized: false },
-  });
+  const transporter = createTransporter();
 
   const mailOptions = {
     from: `"BusBazaar" <${process.env.EMAIL_USER}>`,

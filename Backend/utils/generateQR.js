@@ -32,8 +32,8 @@ function generateQRCodeAndPDF(
     `BUS:${bus_number}`,
     `FARE:Rs.${price}`,
   ].join("\n");
-  const qrPath  = path.join(os.tmpdir(), "qrcode.png");
-  const pdfPath  = path.join(os.tmpdir(), `${tempBookId}.pdf`);
+  const qrPath = path.join(os.tmpdir(), `${tempBookId}.png`);
+  const pdfPath = path.join(os.tmpdir(), `${tempBookId}.pdf`);
 
   return new Promise((resolve, reject) => {
     QRCode.toFile(qrPath, qrCodeData, { width: 150, margin: 1 }, function (err) {
@@ -136,6 +136,8 @@ function generateQRCodeAndPDF(
 
       stream.on("finish", () => {
         console.log("PDF generated:", pdfPath);
+        // Cleanup QR image after PDF is generated.
+        fs.unlink(qrPath, () => {});
         resolve(pdfPath);
       });
       stream.on("error", reject);

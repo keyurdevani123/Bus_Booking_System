@@ -456,7 +456,7 @@ const addBooking = async (data, tempBookId) => {
       console.log("Email sent successfully for", tempBookId);
     })
     .catch((err) => {
-      console.error("PDF/email failed (booking already saved):", err.message);
+      console.error("PDF/email failed (booking already saved):", err);
     });
 };
 
