@@ -1,7 +1,7 @@
 const path = require("path");
 const os   = require("os");
 const fs = require("fs");
-const { createTransporter } = require("./emailTransport");
+const { sendMail } = require("./emailTransport");
 
 async function sendEmailWithAttachment(email, tempBookId) {
   const pdfPath = path.join(os.tmpdir(), `${tempBookId}.pdf`);
@@ -9,8 +9,6 @@ async function sendEmailWithAttachment(email, tempBookId) {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     throw new Error("EMAIL_USER or EMAIL_PASS is missing");
   }
-
-  const transporter = await createTransporter({ secure: false, port: 587 });
 
   const mailOptions = {
     from: `"BusBazaar" <${process.env.EMAIL_USER}>`,
@@ -47,20 +45,18 @@ async function sendEmailWithAttachment(email, tempBookId) {
       attachments: [],
       html: `${mailOptions.html}<p style="color:#b45309;font-size:12px;">Note: Ticket attachment could not be generated automatically. Please contact support with booking reference.</p>`,
     };
-    const info = await transporter.sendMail(fallbackOptions);
+    const info = await sendMail(fallbackOptions, { secure: false, port: 587 });
     console.log("Email sent without attachment to", email, ":", info.response);
     return info;
   }
 
-  const info = await transporter.sendMail(mailOptions);
+  const info = await sendMail(mailOptions, { secure: false, port: 587 });
   console.log("Email sent to", email, ":", info.response);
   fs.unlink(pdfPath, () => {});
   return info;
 }
 
 async function sendCancellationEmail(email, booking) {
-  const transporter = await createTransporter({ secure: false, port: 587 });
-
   const mailOptions = {
     from: `"BusBazaar" <${process.env.EMAIL_USER}>`,
     to: email,
@@ -99,7 +95,7 @@ async function sendCancellationEmail(email, booking) {
     `,
   };
 
-  const info = await transporter.sendMail(mailOptions);
+  const info = await sendMail(mailOptions, { secure: false, port: 587 });
   console.log("Cancellation email sent to", email, ":", info.response);
   return info;
 }
@@ -107,8 +103,6 @@ async function sendCancellationEmail(email, booking) {
 async function sendWaitlistNotificationEmail(email, name, details) {
   const { from, to, date, bookingLink, seatsNotified, seatsWanted } = details;
   const remaining = seatsWanted - seatsNotified;
-
-  const transporter = await createTransporter({ secure: false, port: 587 });
 
   const mailOptions = {
     from: `"BusBazaar" <${process.env.EMAIL_USER}>`,
@@ -153,7 +147,7 @@ async function sendWaitlistNotificationEmail(email, name, details) {
     `,
   };
 
-  const info = await transporter.sendMail(mailOptions);
+  const info = await sendMail(mailOptions, { secure: false, port: 587 });
   console.log("Waitlist notification sent to", email, ":", info.response);
   return info;
 }

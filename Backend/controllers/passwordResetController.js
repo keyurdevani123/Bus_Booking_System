@@ -3,13 +3,11 @@ const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const User = require("../model/User");
 const Admin = require("../model/Admin");
-const { createTransporter } = require("../utils/emailTransport");
+const { sendMail } = require("../utils/emailTransport");
 
 // ─── Email helper ────────────────────────────────────────────────────────────
 const sendResetEmail = async (toEmail, resetURL) => {
-  const transporter = await createTransporter({ secure: true, port: 465 });
-
-  await transporter.sendMail({
+  await sendMail({
     from: `"E-Ticket" <${process.env.EMAIL_USER}>`,
     to: toEmail,
     subject: "Password Reset Request",
@@ -29,7 +27,7 @@ const sendResetEmail = async (toEmail, resetURL) => {
         </div>
       </div>
     `,
-  });
+  }, { secure: true, port: 465 });
 };
 
 // ─── POST /auth/forgot-password ──────────────────────────────────────────────

@@ -1,5 +1,6 @@
 const dns = require("dns");
 const nodemailer = require("nodemailer");
+const fs = require("fs");
 
 const GMAIL_HOSTNAME = "smtp.gmail.com";
 let cachedIpv4Host = null;
@@ -41,4 +42,84 @@ const createTransporter = async ({ secure = false, port = secure ? 465 : 587 } =
   });
 };
 
-module.exports = { createTransporter, GMAIL_HOSTNAME };
+const normalizeRecipients = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  return [value];
+};
+
+const normalizeAttachment = (attachment) => {
+  if (!attachment) return null;
+  if (attachment.content && attachment.filename) {
+    return {
+      filename: attachment.filename,
+      content: Buffer.isBuffer(attachment.content)
+        ? attachment.content.toString("base64")
+        : String(attachment.content),
+    };
+  }
+
+  if (attachment.path && attachment.filename && fs.existsSync(attachment.path)) {
+    return {
+      filename: attachment.filename,
+      content: fs.readFileSync(attachment.path).toString("base64"),
+    };
+  }
+
+  return null;
+};
+
+const sendWithResend = async (mailOptions) => {
+  const from = process.env.RESEND_FROM_EMAIL || process.env.EMAIL_USER;
+  if (!from) {
+    throw new Error("RESEND_FROM_EMAIL or EMAIL_USER is required");
+  }
+
+  const payload = {
+    from,
+    to: normalizeRecipients(mailOptions.to),
+    subject: mailOptions.subject,
+    html: mailOptions.html,
+  };
+
+  const attachments = (mailOptions.attachments || [])
+    .map(normalizeAttachment)
+    .filter(Boolean);
+  if (attachments.length > 0) {
+    payload.attachments = attachments;
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result?.message || result?.error || `Resend API failed with status ${response.status}`);
+  }
+
+  return { response: `Resend ${result.id || "accepted"}` };
+};
+
+const sendMail = async (mailOptions, transportOptions = { secure: false, port: 587 }) => {
+  if (process.env.RESEND_API_KEY) {
+    return sendWithResend(mailOptions);
+  }
+
+  const transporter = await createTransporter(transportOptions);
+  try {
+    return await transporter.sendMail(mailOptions);
+  } catch (err) {
+    if (["ETIMEDOUT", "ESOCKET", "ECONNREFUSED", "ENETUNREACH"].includes(err.code || "")) {
+      err.message = `${err.message}. SMTP connection failed. On Render free web services, outbound SMTP ports 25/465/587 are blocked. Configure RESEND_API_KEY + RESEND_FROM_EMAIL or upgrade the Render service plan.`;
+    }
+    throw err;
+  }
+};
+
+module.exports = { createTransporter, sendMail, GMAIL_HOSTNAME };

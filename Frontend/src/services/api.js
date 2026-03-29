@@ -73,11 +73,13 @@ export const busService = {
 
 // Booking Services
 export const bookingService = {
-  confirmBooking: (tempBookId, sessionId) => {
+  confirmBooking: (tempBookId, sessionId, bookingOwner) => {
     const params = new URLSearchParams();
     if (sessionId) params.append('session_id', sessionId);
     const query = params.toString();
-    return api.post(`/booking/confirm/${tempBookId}${query ? `?${query}` : ''}`);
+    return api.post(`/booking/confirm/${tempBookId}${query ? `?${query}` : ''}`, {
+      bookingOwner: bookingOwner || null,
+    });
   },
   getUserBookingHistory: (email, userId, phone) => {
     const params = new URLSearchParams();

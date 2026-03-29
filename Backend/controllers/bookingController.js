@@ -185,6 +185,35 @@ const sendTicketEmailForBooking = async ({
   }
 };
 
+const normalizeBookingOwner = (owner = {}) => {
+  const userId = owner.userId || owner.id || owner._id || owner.user_id || "";
+  const email = owner.email || "";
+  const phone = owner.phone || "";
+
+  return {
+    userId: userId ? String(userId).trim() : "",
+    email: email ? String(email).trim() : "",
+    phone: phone ? Number(String(phone).replace(/\D/g, "")) : null,
+  };
+};
+
+const mergeBookingOwnerIntoData = (data, bookingOwner) => {
+  if (!data || !bookingOwner) return data;
+  const next = { ...data };
+
+  if (!next.userId && bookingOwner.userId) {
+    next.userId = bookingOwner.userId;
+  }
+  if (!next.email && bookingOwner.email) {
+    next.email = bookingOwner.email;
+  }
+  if ((!next.phone || Number.isNaN(Number(next.phone))) && bookingOwner.phone) {
+    next.phone = bookingOwner.phone;
+  }
+
+  return next;
+};
+
 const makePayment = asyncHandler(async (req, res) => {
   const {
     id,
@@ -568,6 +597,7 @@ const addBooking = async (data, tempBookId) => {
 const confirmBooking = asyncHandler(async (req, res) => {
   const { tempBookId } = req.params;
   const sessionId = req.query.session_id || req.body?.sessionId || "";
+  const bookingOwner = normalizeBookingOwner(req.body?.bookingOwner || {});
   if (!tempBookId) return res.status(400).json({ message: "Missing tempBookId" });
 
   let data = paymentStore[tempBookId];
@@ -583,6 +613,12 @@ const confirmBooking = asyncHandler(async (req, res) => {
       // Not in memory or pending DB: check if it was already persisted as booking.
       const alreadyBooked = await Booking.findOne({ tempBookId }).lean();
       if (alreadyBooked) {
+        if (!alreadyBooked.userId && bookingOwner.userId) {
+          await Booking.updateOne(
+            { _id: alreadyBooked._id },
+            { $set: { userId: bookingOwner.userId } }
+          );
+        }
         // If booking exists but email wasn't sent, retry in background.
         if (!alreadyBooked.emailSent && alreadyBooked.email) {
           sendEmailWithAttachment(alreadyBooked.email, tempBookId)
@@ -605,7 +641,8 @@ const confirmBooking = asyncHandler(async (req, res) => {
 
   try {
     await validatePaidCheckoutSession(tempBookId, sessionId);
-    await addBooking(data, tempBookId);
+    const mergedData = mergeBookingOwnerIntoData(data, bookingOwner);
+    await addBooking(mergedData, tempBookId);
     delete paymentStore[tempBookId];
     console.log("Booking confirmed via success-page fallback:", tempBookId);
     res.json({ ok: true });

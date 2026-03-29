@@ -42,7 +42,11 @@ function PaymentSuccess() {
     confirmed.current = true;
     setConfirmState('confirming');
 
-    bookingService.confirmBooking(tempBookId, sessionId)
+    bookingService.confirmBooking(tempBookId, sessionId, {
+      userId: userToken?.id || userToken?._id || userToken?.userId || '',
+      email: userToken?.email || '',
+      phone: userToken?.phone || '',
+    })
       .then(() => {
         const cacheKey = `bh_cache_${userToken?.id || userToken?.email || email}`;
         try { sessionStorage.removeItem(cacheKey); } catch {}
