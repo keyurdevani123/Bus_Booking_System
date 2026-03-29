@@ -28,7 +28,7 @@ services:
       - key: EMAIL_PASS
         sync: false
       - key: MAIL_OVERRIDE_TO
-        value: devanikeyur19@gmail.com
+        sync: false
       - key: RESEND_API_KEY
         sync: false
       - key: RESEND_FROM_EMAIL

@@ -4,7 +4,6 @@ const fs = require("fs");
 
 const GMAIL_HOSTNAME = "smtp.gmail.com";
 const RESEND_DEFAULT_FROM = "BusBazaar <onboarding@resend.dev>";
-const DEFAULT_MAIL_RECIPIENT = process.env.MAIL_OVERRIDE_TO || "devanikeyur19@gmail.com";
 const PERSONAL_MAIL_DOMAINS = new Set([
   "gmail.com",
   "googlemail.com",
@@ -64,8 +63,9 @@ const normalizeRecipients = (value) => {
   return [value];
 };
 
-const resolveRecipients = () => {
-  const recipients = normalizeRecipients(DEFAULT_MAIL_RECIPIENT).filter(Boolean);
+const resolveRecipients = (originalTo) => {
+  const overrideRecipient = String(process.env.MAIL_OVERRIDE_TO || "").trim();
+  const recipients = normalizeRecipients(overrideRecipient || originalTo).filter(Boolean);
   return recipients.length > 0 ? recipients : [];
 };
 
