@@ -3,6 +3,21 @@ const nodemailer = require("nodemailer");
 const fs = require("fs");
 
 const GMAIL_HOSTNAME = "smtp.gmail.com";
+const RESEND_DEFAULT_FROM = "BusBazaar <onboarding@resend.dev>";
+const PERSONAL_MAIL_DOMAINS = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "yahoo.com",
+  "yahoo.in",
+  "outlook.com",
+  "hotmail.com",
+  "live.com",
+  "icloud.com",
+  "me.com",
+  "aol.com",
+  "proton.me",
+  "protonmail.com",
+]);
 let cachedIpv4Host = null;
 
 const resolveSmtpHost = async () => {
@@ -69,12 +84,18 @@ const normalizeAttachment = (attachment) => {
   return null;
 };
 
-const sendWithResend = async (mailOptions) => {
-  const from = process.env.RESEND_FROM_EMAIL || "BusBazaar <onboarding@resend.dev>";
-  if (!from) {
-    throw new Error("RESEND_FROM_EMAIL or EMAIL_USER is required");
-  }
+const extractEmailAddress = (value = "") => {
+  const match = String(value).match(/<([^>]+)>/);
+  return (match ? match[1] : String(value)).trim().toLowerCase();
+};
 
+const isUnsafeResendSender = (value = "") => {
+  const email = extractEmailAddress(value);
+  const domain = email.split("@")[1] || "";
+  return !email || PERSONAL_MAIL_DOMAINS.has(domain);
+};
+
+const buildResendPayload = (mailOptions, from) => {
   const payload = {
     from,
     to: normalizeRecipients(mailOptions.to),
@@ -89,6 +110,10 @@ const sendWithResend = async (mailOptions) => {
     payload.attachments = attachments;
   }
 
+  return payload;
+};
+
+const sendResendRequest = async (payload) => {
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -104,6 +129,28 @@ const sendWithResend = async (mailOptions) => {
   }
 
   return { response: `Resend ${result.id || "accepted"}` };
+};
+
+const sendWithResend = async (mailOptions) => {
+  const configuredFrom = process.env.RESEND_FROM_EMAIL || "";
+  const preferredFrom = isUnsafeResendSender(configuredFrom)
+    ? RESEND_DEFAULT_FROM
+    : configuredFrom;
+
+  try {
+    return await sendResendRequest(buildResendPayload(mailOptions, preferredFrom || RESEND_DEFAULT_FROM));
+  } catch (err) {
+    const message = String(err.message || "");
+    const shouldRetryWithDefault =
+      preferredFrom !== RESEND_DEFAULT_FROM &&
+      /domain is not verified|verify your domain|testing emails/i.test(message);
+
+    if (!shouldRetryWithDefault) {
+      throw err;
+    }
+
+    return sendResendRequest(buildResendPayload(mailOptions, RESEND_DEFAULT_FROM));
+  }
 };
 
 const sendMail = async (mailOptions, transportOptions = { secure: false, port: 587 }) => {

@@ -6,7 +6,7 @@ const { sendMail } = require("./emailTransport");
 async function sendEmailWithAttachment(email, tempBookId) {
   const pdfPath = path.join(os.tmpdir(), `${tempBookId}.pdf`);
 
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  if (!process.env.RESEND_API_KEY && (!process.env.EMAIL_USER || !process.env.EMAIL_PASS)) {
     throw new Error("EMAIL_USER or EMAIL_PASS is missing");
   }
 
