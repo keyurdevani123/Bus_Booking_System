@@ -31,3 +31,5 @@ services:
         sync: false
       - key: RESEND_FROM_EMAIL
         sync: false
+      - key: RESEND_USE_CONFIGURED_FROM
+        value: "false"

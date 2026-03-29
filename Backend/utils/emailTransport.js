@@ -133,9 +133,10 @@ const sendResendRequest = async (payload) => {
 
 const sendWithResend = async (mailOptions) => {
   const configuredFrom = process.env.RESEND_FROM_EMAIL || "";
-  const preferredFrom = isUnsafeResendSender(configuredFrom)
-    ? RESEND_DEFAULT_FROM
-    : configuredFrom;
+  const allowCustomFrom = String(process.env.RESEND_USE_CONFIGURED_FROM || "").toLowerCase() === "true";
+  const preferredFrom = allowCustomFrom && !isUnsafeResendSender(configuredFrom)
+    ? configuredFrom
+    : RESEND_DEFAULT_FROM;
 
   try {
     return await sendResendRequest(buildResendPayload(mailOptions, preferredFrom || RESEND_DEFAULT_FROM));
