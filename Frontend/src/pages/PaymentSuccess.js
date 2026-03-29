@@ -17,6 +17,15 @@ function PaymentSuccess() {
       return null;
     }
   })();
+  const adminData = (() => {
+    try {
+      const raw = localStorage.getItem('adminData');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  })();
+  const activeAccount = userToken || adminData;
 
   const from = params.get('from') || '--';
   const to = params.get('to') || '--';
@@ -43,12 +52,12 @@ function PaymentSuccess() {
     setConfirmState('confirming');
 
     bookingService.confirmBooking(tempBookId, sessionId, {
-      userId: userToken?.id || userToken?._id || userToken?.userId || '',
-      email: userToken?.email || '',
-      phone: userToken?.phone || '',
+      userId: activeAccount?.id || activeAccount?._id || activeAccount?.userId || '',
+      email: activeAccount?.email || '',
+      phone: activeAccount?.phone || '',
     })
       .then(() => {
-        const cacheKey = `bh_cache_${userToken?.id || userToken?.email || email}`;
+        const cacheKey = `bh_cache_${activeAccount?.id || activeAccount?.email || email}`;
         try { sessionStorage.removeItem(cacheKey); } catch {}
         setConfirmState('confirmed');
         setConfirmMessage('Your booking is confirmed.');
@@ -59,7 +68,7 @@ function PaymentSuccess() {
         setConfirmState('failed');
         setConfirmMessage(err.response?.data?.message || 'Payment received, but booking confirmation failed. Please contact support.');
       });
-  }, [email, sessionId, tempBookId, userToken?.email, userToken?.id]);
+  }, [activeAccount?.email, activeAccount?.id, email, sessionId, tempBookId]);
 
   const seatList = seats.split(',').join(', ');
 

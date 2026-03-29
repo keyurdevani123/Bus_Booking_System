@@ -35,12 +35,14 @@ function Booking() {
 
   const [selectedSeats, setSelectedSeats] = useState([]);
 
-  // Pre-fill form with logged-in user's details
+  // Pre-fill form with logged-in account details
   const userToken = (() => { try { const s = localStorage.getItem('userToken'); return s ? JSON.parse(s) : null; } catch { return null; } })();
+  const adminData = (() => { try { const s = localStorage.getItem('adminData'); return s ? JSON.parse(s) : null; } catch { return null; } })();
+  const activeAccount = userToken || adminData;
   const [formData, setFormData] = useState({
-    name:  userToken?.name  || '',
-    email: userToken?.email || '',
-    phone: userToken?.phone || '',
+    name:  activeAccount?.name || activeAccount?.username || '',
+    email: activeAccount?.email || '',
+    phone: activeAccount?.phone || '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -153,10 +155,10 @@ function Booking() {
     try {
       if (!bus) throw new Error('Bus data not loaded.');
       if (!effectiveFrom || !effectiveTo) throw new Error('Route information missing. Go back and search again.');
-      const accountEmail = userToken?.email || formData.email;
-      const accountPhone = userToken?.phone || formData.phone;
-      const accountName = userToken?.name || formData.name;
-      const accountUserId = userToken?.id || userToken?._id || userToken?.userId || '';
+      const accountEmail = activeAccount?.email || formData.email;
+      const accountPhone = activeAccount?.phone || formData.phone;
+      const accountName = activeAccount?.name || activeAccount?.username || formData.name;
+      const accountUserId = activeAccount?.id || activeAccount?._id || activeAccount?.userId || '';
       const departureTime = bus.searchedDepartureTime || bus.busFrom?.departureTime;
       const arrivalTime = bus.searchedArrivalTime || bus.busTo?.arrivalTime;
       const bookingData = {
@@ -220,7 +222,7 @@ function Booking() {
         name: formData.name,
         email: formData.email,
         phone: Number(formData.phone),
-        userId: userToken?.id || '',
+        userId: activeAccount?.id || activeAccount?._id || activeAccount?.userId || '',
         seatsWanted: Number(seatsWanted),
       });
       setWlSuccess(

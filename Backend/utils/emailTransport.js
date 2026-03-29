@@ -70,7 +70,7 @@ const normalizeAttachment = (attachment) => {
 };
 
 const sendWithResend = async (mailOptions) => {
-  const from = process.env.RESEND_FROM_EMAIL || process.env.EMAIL_USER;
+  const from = process.env.RESEND_FROM_EMAIL || "BusBazaar <onboarding@resend.dev>";
   if (!from) {
     throw new Error("RESEND_FROM_EMAIL or EMAIL_USER is required");
   }
