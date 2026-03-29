@@ -240,17 +240,26 @@ const makePayment = asyncHandler(async (req, res) => {
   }, 5 * 60 * 1000); // 5 minutes
   // ─────────────────────────────────────────────────────────────────────────
 
-  const seatCount  = seatSplit.length;
-  const totalPrice = price * seatCount;
+  const seatCount = seatSplit.length;
+  const perSeatPrice = Number(price);
+  if (!Number.isFinite(perSeatPrice) || perSeatPrice <= 0) {
+    return res.status(400).json({ message: "Invalid ticket price" });
+  }
+  const totalPrice = perSeatPrice * seatCount;
 
-  // Derive the frontend/backend root URL from the incoming request (works on any host/IP/domain)
-  const siteRoot = process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`;
-  const backendRoot = siteRoot; // same origin (React build is served from Express)
-  const busImageURL = bus.imagesURLs && bus.imagesURLs.length > 0
+  // Frontend root is where Stripe should redirect user after payment.
+  const frontendRoot = process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`;
+  // Backend root must be used for image URLs (bus images are served by backend route).
+  const backendRoot = process.env.BACKEND_URL || `${req.protocol}://${req.get("host")}`;
+  const rawBusImageURL = bus.imagesURLs && bus.imagesURLs.length > 0
     ? `${backendRoot}/bus/busses/${bus.imagesURLs[0]}`
     : null;
+  // Stripe only accepts public HTTPS image URLs for checkout products.
+  const busImageURL = rawBusImageURL && /^https:\/\//.test(rawBusImageURL) ? rawBusImageURL : null;
 
-  const session = await stripe.checkout.sessions.create({
+  let session;
+  try {
+    session = await stripe.checkout.sessions.create({
     line_items: [
       {
         price_data: {
@@ -262,7 +271,7 @@ const makePayment = asyncHandler(async (req, res) => {
               `Seats: ${seats}  |  Bus: ${numberPlate} (${busName})`,
             ...(busImageURL ? { images: [busImageURL] } : {}),
           },
-          unit_amount: price * 100,   // per-seat price in paise
+          unit_amount: Math.round(perSeatPrice * 100), // per-seat price in paise
         },
         quantity: seatCount,          // number of seats
       },
@@ -272,10 +281,10 @@ const makePayment = asyncHandler(async (req, res) => {
     customer_email: email,
     billing_address_collection: "required",
     success_url:
-      siteRoot +
+      frontendRoot +
       `/payment-success?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}&departure=${encodeURIComponent(departureTime)}&arrival=${encodeURIComponent(arrivalTime)}&seats=${encodeURIComponent(seats)}&price=${encodeURIComponent(totalPrice)}&bus=${encodeURIComponent(numberPlate)}&name=${encodeURIComponent(busName)}&email=${encodeURIComponent(email)}&tempBookId=${encodeURIComponent(tempBookId)}`,
     // tempBookId also passed in URL so frontend can confirm booking without needing webhook
-    cancel_url: siteRoot + "/",
+    cancel_url: frontendRoot + "/",
     metadata: {
       tempBookId: tempBookId,
     },
@@ -287,6 +296,12 @@ const makePayment = asyncHandler(async (req, res) => {
       },
     },
   });
+  } catch (err) {
+    console.error("Stripe checkout session create failed:", err?.message || err);
+    return res.status(500).json({
+      message: err?.raw?.message || err?.message || "Failed to create payment session",
+    });
+  }
 
   //console.log("TempBookId: ", tempBookId);
 
